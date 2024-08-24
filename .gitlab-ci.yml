@@ -34,7 +34,7 @@ docker_build:
     - docker
   script:
     - echo "Building Docker image..."
-    - docker build -t $DOCKER_IMAGE_PREFIX-tst .
+    - docker build -t --build-arg TMDB_V3_API_KEY=$TMDB_V3_API_KEY $DOCKER_IMAGE_PREFIX-tst .
     - docker images $DOCKER_IMAGE_PREFIX-tst
     - mkdir -p image
     - docker save $DOCKER_IMAGE_PREFIX-tst > image/$DOCKER_IMAGE_PREFIX-tst-$CI_PIPELINE_ID.tar
@@ -57,12 +57,13 @@ docker_test:
     echo "Loading Docker image..."
     docker load -i image/$DOCKER_IMAGE_PREFIX-tst-$CI_PIPELINE_ID.tar
     echo "Running Docker container..."
-    docker run --rm -d --name $DOCKER_IMAGE_PREFIX-tst -e TMDB_V3_API_KEY=$TMDB_V3_API_KEY -p $PORT:80 --network minikube $DOCKER_IMAGE_PREFIX-tst
-    export IP=$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' $DOCKER_IMAGE_PREFIX-tst)
+    docker run --rm -d --name $DOCKER_IMAGE_PREFIX-tst -p $PORT:80 --network minikube $DOCKER_IMAGE_PREFIX-tst
+    export containerIP=$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' $DOCKER_IMAGE_PREFIX-tst)
     echo "Container IP: $IP"
     sleep 10
     echo "Checking container status..."
-    docker run --rm --network minikube alpine wget -q -O- http://$IP:$PORT | grep -i hello
+    docker run --rm --network minikube alpine curl --fail http://${containerIP}:80 || exit 1
+    docker run --rm --network minikube alpine curl --fail http://${containerIP}:80 || { echo "Error: Failed to connect to ${containerIp}:80"; exit 1; }
     echo "Stopping Docker container..."
     docker stop $DOCKER_IMAGE_PREFIX-tst
 
