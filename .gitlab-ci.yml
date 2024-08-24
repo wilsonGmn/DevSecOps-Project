@@ -70,7 +70,6 @@ docker_test:
 docker_push:
   stage: build
   needs:
-    - docker_build
     - docker_test
   image: docker:24.0.5
   tags:
