@@ -22,7 +22,7 @@ stages:
   - secure
 
 variables:
-  DOCKER_IMAGE_PREFIX: "netflix-clone"
+  DOCKER_IMAGE_PREFIX: "netflix-app"
   DOCKER_REGISTRY_URL: "registry.local:8443"
   PORT: 8080
   DOCKER_DRIVER: overlay2
@@ -62,8 +62,8 @@ docker_push:
     - docker load -i image/$DOCKER_IMAGE_PREFIX-tst-$CI_PIPELINE_ID.tar
     - echo "$DOCKER_IMAGE_PREFIX-tst $DOCKER_REGISTRY_URL"
     - docker login -u $REGISTRY_USER -p $REGISTRY_PASSWORD $DOCKER_REGISTRY_URL
-    - docker tag $DOCKER_REGISTRY_URL/$DOCKER_IMAGE_PREFIX-tst $DOCKER_REGISTRY_URL/netflix-clone/$DOCKER_IMAGE_PREFIX-tst
-    - docker push $DOCKER_REGISTRY_URL/netflix-clone/$DOCKER_IMAGE_PREFIX-tst
+    - docker tag $DOCKER_REGISTRY_URL/$DOCKER_IMAGE_PREFIX-tst $DOCKER_REGISTRY_URL/netflix-app/$DOCKER_IMAGE_PREFIX-tst
+    - docker push $DOCKER_REGISTRY_URL/netflix-app/$DOCKER_IMAGE_PREFIX-tst
 
 
 docker_test:
@@ -132,7 +132,7 @@ k8s_dev_deploy:
     kubectl apply -f /Kubernetes/deployment.yml
     kubectl apply -f /Kubernetes/service.yml
 
-#helm install netflix-clone-chart --generate-name
+#helm install netflix-app-chart --generate-name
 
 dast:
   stage: secure
