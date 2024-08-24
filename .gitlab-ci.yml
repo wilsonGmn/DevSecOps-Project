@@ -34,20 +34,44 @@ docker_build:
     - docker
   script:
     - echo "Building Docker image..."
-    - docker build -t $DOCKER_REGISTRY_URL/$DOCKER_IMAGE_PREFIX-tst .
-    - docker images $DOCKER_REGISTRY_URL/$DOCKER_IMAGE_PREFIX-tst
+    - docker build -t $DOCKER_IMAGE_PREFIX-tst .
+    - docker images $DOCKER_IMAGE_PREFIX-tst
     - mkdir -p image
-    - docker save $DOCKER_REGISTRY_URL/$DOCKER_IMAGE_PREFIX-tst > image/$DOCKER_IMAGE_PREFIX-tst-$CI_PIPELINE_ID.tar
+    - docker save $DOCKER_IMAGE_PREFIX-tst > image/$DOCKER_IMAGE_PREFIX-tst-$CI_PIPELINE_ID.tar
   artifacts:
     when: on_success
     paths:
       - image
     expire_in: 1 day
 
+docker_test:
+  stage: build
+  image: docker:24.0.5
+  needs:
+    - docker_build
+  tags:
+    - docker
+  dependencies:
+    - docker_build
+  script: |
+    echo "Loading Docker image..."
+    docker load -i image/$DOCKER_IMAGE_PREFIX-tst-$CI_PIPELINE_ID.tar
+    echo "Running Docker container..."
+    docker run --rm -d --name $DOCKER_IMAGE_PREFIX-tst -p $PORT:80 --network minikube $DOCKER_IMAGE_PREFIX-tst
+    export IP=$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' $DOCKER_IMAGE_PREFIX-tst)
+    echo "Container IP: $IP"
+    sleep 10
+    echo "Checking container status..."
+    docker run --rm --network minikube alpine wget -q -O- http://$IP:$PORT | grep -i hello
+    echo "Stopping Docker container..."
+    docker stop $DOCKER_IMAGE_PREFIX-tst
+
+
 docker_push:
   stage: build
   needs:
     - docker_build
+    - docker_test
   image: docker:24.0.5
   tags:
     - docker
@@ -62,32 +86,9 @@ docker_push:
     - docker load -i image/$DOCKER_IMAGE_PREFIX-tst-$CI_PIPELINE_ID.tar
     - echo "$DOCKER_IMAGE_PREFIX-tst $DOCKER_REGISTRY_URL"
     - docker login -u $REGISTRY_USER -p $REGISTRY_PASSWORD $DOCKER_REGISTRY_URL
-    - docker tag $DOCKER_REGISTRY_URL/$DOCKER_IMAGE_PREFIX-tst $DOCKER_REGISTRY_URL/netflix-app/$DOCKER_IMAGE_PREFIX-tst
+    - docker tag $DOCKER_IMAGE_PREFIX-tst $DOCKER_REGISTRY_URL/netflix-app/$DOCKER_IMAGE_PREFIX-tst
     - docker push $DOCKER_REGISTRY_URL/netflix-app/$DOCKER_IMAGE_PREFIX-tst
 
-
-docker_test:
-  stage: build
-  image: docker:24.0.5
-  needs:
-    - docker_build
-    - docker_push
-  tags:
-    - docker
-  dependencies:
-    - docker_build
-  script: |
-    echo "Loading Docker image..."
-    docker load -i image/$DOCKER_IMAGE_PREFIX-tst-$CI_PIPELINE_ID.tar
-    echo "Running Docker container..."
-    docker run --rm -d --name $DOCKER_IMAGE_PREFIX-tst -p $PORT:80 --network minikube $DOCKER_REGISTRY_URL/$DOCKER_IMAGE_PREFIX-tst
-    export IP=$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' $DOCKER_IMAGE_PREFIX-tst)
-    echo "Container IP: $IP"
-    sleep 10
-    echo "Checking container status..."
-    docker run --rm --network minikube alpine wget -q -O- http://$IP:$PORT | grep -i hello
-    echo "Stopping Docker container..."
-    docker stop $DOCKER_IMAGE_PREFIX-tst
 
 code_quality:
   stage: test
