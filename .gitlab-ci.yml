@@ -57,7 +57,7 @@ docker_test:
     echo "Loading Docker image..."
     docker load -i image/$DOCKER_IMAGE_PREFIX-tst-$CI_PIPELINE_ID.tar
     echo "Running Docker container..."
-    docker run --rm -d --name $DOCKER_IMAGE_PREFIX-tst -p $PORT:80 --network minikube $DOCKER_IMAGE_PREFIX-tst
+    docker run --rm -d --name $DOCKER_IMAGE_PREFIX-tst -e TMDB_V3_API_KEY=$TMDB_V3_API_KEY -p $PORT:80 --network minikube $DOCKER_IMAGE_PREFIX-tst
     export IP=$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' $DOCKER_IMAGE_PREFIX-tst)
     echo "Container IP: $IP"
     sleep 10
