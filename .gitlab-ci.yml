@@ -1,0 +1,142 @@
+# .gitlab
+
+workflow:
+  name: Build & Deploy
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main" || $CI_COMMIT_BRANCH =~ /^feature/'
+      when: always
+    - if: '$CI_MERGE_REQUEST_SOURCE_BRANCH_NAME =~ /^feature/ && $CI_PIPELINE_SOURCE == "merge_request_event"'
+      when: always
+
+
+include:
+  - template: Code-Quality.gitlab-ci.yml
+  - template: 'Security/SAST.gitlab-ci.yml'
+  - template: 'Security/Container-Scanning.gitlab-ci.yml'
+  - template: 'Security/Dependency-Scanning.gitlab-ci.yml'
+
+stages:
+  - build
+  - test
+  - dev-deploy
+  - secure
+
+variables:
+  DOCKER_IMAGE_PREFIX: "netflix-app"
+  DOCKER_REGISTRY_URL: "registry.local:8443"
+  PORT: 8080
+  DOCKER_DRIVER: overlay2
+
+docker_build:
+  stage: build
+  image: docker:24.0.5
+  tags:
+    - docker
+  script:
+    - echo "Building Docker image..."
+    - docker build -t $DOCKER_REGISTRY_URL/$DOCKER_IMAGE_PREFIX-tst .
+    - docker images $DOCKER_REGISTRY_URL/$DOCKER_IMAGE_PREFIX-tst
+    - mkdir -p image
+    - docker save $DOCKER_REGISTRY_URL/$DOCKER_IMAGE_PREFIX-tst > image/$DOCKER_IMAGE_PREFIX-tst-$CI_PIPELINE_ID.tar
+  artifacts:
+    when: on_success
+    paths:
+      - image
+    expire_in: 1 day
+
+docker_test:
+  stage: build
+  image: docker:24.0.5
+  needs:
+    - docker_build
+  tags:
+    - docker
+  dependencies:
+    - docker_build
+  script: |
+    echo "Loading Docker image..."
+    docker load -i image/$DOCKER_IMAGE_PREFIX-tst-$CI_PIPELINE_ID.tar
+    echo "Running Docker container..."
+    docker run --rm -d --name $DOCKER_IMAGE_PREFIX-tst -p $PORT:80 --network minikube $DOCKER_REGISTRY_URL/$DOCKER_IMAGE_PREFIX-tst
+    export IP=$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' $DOCKER_IMAGE_PREFIX-tst)
+    echo "Container IP: $IP"
+    sleep 10
+    echo "Checking container status..."
+    docker run --rm --network minikube alpine wget -q -O- http://$IP:$PORT | grep -i hello
+    echo "Stopping Docker container..."
+    docker stop $DOCKER_IMAGE_PREFIX-tst
+
+docker_push:
+  stage: build
+  needs:
+    - docker_build
+    - docker_test
+  image: docker:24.0.5
+  tags:
+    - docker
+  services:
+    - docker:24.0.5-dind
+  script:
+    - HOST="registry.local"
+    - PORT=8443
+    - echo "Testing connection to $HOST:$PORT"
+    - nc -z -w 5 $HOST $PORT
+    - if [ $? -ne 0 ]; then echo "Host $HOST:$PORT is not reachable."; exit 1; else echo "Host $HOST:$PORT is reachable."; fi
+    - docker load -i image/$DOCKER_IMAGE_PREFIX-tst-$CI_PIPELINE_ID.tar
+    - echo "$DOCKER_IMAGE_PREFIX-tst $DOCKER_REGISTRY_URL"
+    - docker login -u $REGISTRY_USER -p $REGISTRY_PASSWORD $DOCKER_REGISTRY_URL
+    - docker tag $DOCKER_REGISTRY_URL/$DOCKER_IMAGE_PREFIX-tst $DOCKER_REGISTRY_URL/netflix-app/$DOCKER_IMAGE_PREFIX-tst
+    - docker push $DOCKER_REGISTRY_URL/netflix-app/$DOCKER_IMAGE_PREFIX-tst
+
+code_quality:
+  stage: test
+  image: docker:latest
+  script:
+    - echo "Running code quality checks"
+  after_script:
+    - ls -l
+  artifacts:
+    expose_as: 'Code Quality Report'
+    paths: [gl-code-quality-report.json]
+    expire_in: 1 day
+  allow_failure: true
+
+sast:
+  stage: test
+  image: docker:latest
+  script:
+    - echo "Running SAST"
+  variables:
+    CI_DEBUG_TRACE: "true"
+  artifacts:
+    reports:
+      sast: gl-sast-report.json
+
+k8s_dev_deploy:
+  stage: dev-deploy
+  image: 
+    name: wilsongmn/kubectl:alpine3.7
+  dependencies:
+    - docker_push
+  script: |
+    HOST="cluster.local"
+    PORT=8443
+    echo "Testing connection to $HOST:$PORT"
+    nc -z -w 5 $HOST $PORT
+    if [ $? -ne 0 ]; then echo "Host $HOST:$PORT is not reachable."; exit 1; else echo "Host $HOST:$PORT is reachable."; fi
+    export KUBECONFIG=$DEV_KUBE_CONFIG
+    kubectl version -o yaml
+    kubectl config get-contexts
+    kubectl get nodes
+    kubectl apply -f /Kubernetes/deployment.yml
+    kubectl apply -f /Kubernetes/service.yml
+
+#helm install netflix-app-chart --generate-name
+
+dast:
+  stage: secure
+  image: docker:latest
+  script:
+    - echo "Running Dynamic Application Security Testing (DAST)"
+  variables:
+    DNS_HOSTNAME: ""
