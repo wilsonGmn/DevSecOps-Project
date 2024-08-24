@@ -62,8 +62,7 @@ docker_test:
     echo "Container IP: $IP"
     sleep 10
     echo "Checking container status..."
-    docker run --rm --network minikube alpine curl --fail http://${containerIP}:80 || exit 1
-    docker run --rm --network minikube alpine curl --fail http://${containerIP}:80 || { echo "Error: Failed to connect to ${containerIp}:80"; exit 1; }
+    docker run --rm --network minikube busybox sh -c "curl --fail http://${containerIP}:80 || { echo 'Error: Failed to connect to ${containerIP}:80'; exit 1; }"
     echo "Stopping Docker container..."
     docker stop $DOCKER_IMAGE_PREFIX-tst
 
