@@ -34,7 +34,7 @@ docker_build:
     - docker
   script:
     - echo "Building Docker image..."
-    - docker build -t --build-arg TMDB_V3_API_KEY=$TMDB_V3_API_KEY $DOCKER_IMAGE_PREFIX-tst .
+    - docker build --build-arg TMDB_V3_API_KEY=$TMDB_V3_API_KEY -t $DOCKER_IMAGE_PREFIX-tst .
     - docker images $DOCKER_IMAGE_PREFIX-tst
     - mkdir -p image
     - docker save $DOCKER_IMAGE_PREFIX-tst > image/$DOCKER_IMAGE_PREFIX-tst-$CI_PIPELINE_ID.tar
