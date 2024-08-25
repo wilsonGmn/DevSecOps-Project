@@ -10,8 +10,7 @@ workflow:
 
 
 include:
-  - component: gitlab.com/gitlab-components/code-quality/code-quality@1.0
-
+  - component: $CI_SERVER_FQDN/components/code-quality/code-quality@1.0.4
 
 stages:
   - build
