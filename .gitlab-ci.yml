@@ -10,7 +10,11 @@ workflow:
 
 
 include:
-  - component: gitlab.local/components/code-quality/code-quality@1.0.4
+  - template: Code-Quality.gitlab-ci.yml
+  - template: 'Security/SAST.gitlab-ci.yml'
+  - template: 'Security/Container-Scanning.gitlab-ci.yml'
+  - template: 'Security/Dependency-Scanning.gitlab-ci.yml'
+  
 stages:
   - build
   - test
