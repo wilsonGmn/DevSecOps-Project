@@ -119,9 +119,11 @@ container_scanning:
   stage: test
   image: docker:latest
   variables:
-      GIT_STRATEGY: fetch
-      KLAR_TRACE: "true"
-      CLAIR_TRACE: "true"
+    GIT_STRATEGY: fetch
+    KLAR_TRACE: "true"
+    CLAIR_TRACE: "true"
+  script:
+    - echo "Scanning testing" 
 
 k8s_dev_deploy:
   stage: dev-deploy
