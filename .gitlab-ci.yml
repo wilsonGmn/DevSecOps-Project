@@ -92,6 +92,10 @@ docker_push:
 code_quality:
   stage: test
   image: docker:latest
+  tags:
+    - docker
+  services:
+    - docker:24.0.5-dind
   script:
     - echo "Running code quality checks"
   after_script:
@@ -105,6 +109,10 @@ code_quality:
 sast:
   stage: test
   image: docker:latest
+  tags:
+  - docker
+  services:
+    - docker:24.0.5-dind
   script:
     - echo "Running SAST"
   variables:
