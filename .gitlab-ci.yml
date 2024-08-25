@@ -94,7 +94,7 @@ code_quality:
   variables:
     REPORT_FORMAT: html
   after_script: 
-    - ls -l 
+    - ls -l /builds/manager/
   artifacts:
     paths: [gl-code-quality-report.html]
     reports:
