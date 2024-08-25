@@ -12,7 +12,7 @@ include:
   - template: 'Jobs/Code-Quality.gitlab-ci.yml'
   - template: 'Jobs/SAST.gitlab-ci.yml'
   - template: 'Jobs/Container-Scanning.gitlab-ci.yml'
-  - template: 'Jobs/Dependency-Scanning.gitlab-ci.yml'
+
 
 
 stages:
@@ -103,15 +103,15 @@ code_quality:
     reports:
       codequality: []
 
-dependency_scanning:
+dependency_scan:
   stage: test
-  image: docker:latest
-  tags:
-  - docker
-  variables:
-    CI_DEBUG_TRACE: "true"
+  image: owasp/dependency-check
   script:
-    - echo "dependency scanning" 
+    - dependency-check.sh --project "netflix-app" --scan /build
+  artifacts:
+    reports:
+      dependency_scanning: gl-dependency-scanning-report.json
+
 sast:
   stage: test
   tags:
