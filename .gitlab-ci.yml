@@ -105,7 +105,8 @@ dependency_scanning:
   image: docker:latest
   variables:
     CI_DEBUG_TRACE: "true"
-
+  script:
+    - echo "dependency scanning" 
 sast:
   stage: test
   image: docker:latest
@@ -114,6 +115,8 @@ sast:
   artifacts:
     reports:
       sast: gl-sast-report.json
+  script:
+    - echo "sast scanning" 
 
 container_scanning:
   stage: test
@@ -123,7 +126,7 @@ container_scanning:
     KLAR_TRACE: "true"
     CLAIR_TRACE: "true"
   script:
-    - echo "Scanning testing" 
+    - echo "container scanning" 
 
 k8s_dev_deploy:
   stage: dev-deploy
