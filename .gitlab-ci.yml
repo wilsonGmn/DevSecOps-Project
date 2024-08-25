@@ -100,6 +100,29 @@ code_quality:
     reports:
       codequality: []
 
+dependency_scanning:
+  stage: test
+  image: docker:latest
+  variables:
+    CI_DEBUG_TRACE: "true"
+
+sast:
+  stage: test
+  image: docker:latest
+  variables:
+    CI_DEBUG_TRACE: "true"
+  artifacts:
+    reports:
+      sast: gl-sast-report.json
+
+container_scanning:
+    stage: test
+    image: docker:latest
+    variables:
+        GIT_STRATEGY: fetch
+        KLAR_TRACE: "true"
+        CLAIR_TRACE: "true"
+
 k8s_dev_deploy:
   stage: dev-deploy
   image: 
@@ -119,3 +142,9 @@ k8s_dev_deploy:
     kubectl apply -f /Kubernetes/deployment.yml
     kubectl apply -f /Kubernetes/service.yml
 
+dast:
+  stage: secure
+  variables:
+    DNS_HOSTNAME: "cluster.local"
+  script:
+    - echo "Dinamic application segurity testing"
