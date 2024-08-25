@@ -103,12 +103,16 @@ code_quality:
 dependency_scanning:
   stage: test
   image: docker:latest
+  tags:
+  - docker
   variables:
     CI_DEBUG_TRACE: "true"
   script:
     - echo "dependency scanning" 
 sast:
   stage: test
+  tags:
+  - docker
   image: docker:latest
   variables:
     CI_DEBUG_TRACE: "true"
@@ -121,6 +125,10 @@ sast:
 container_scanning:
   stage: test
   image: docker:latest
+  tags:
+  - docker
+  dependencies:
+    - docker_build
   variables:
     GIT_STRATEGY: fetch
     KLAR_TRACE: "true"
@@ -149,7 +157,11 @@ k8s_dev_deploy:
 
 dast:
   stage: secure
+  tags:
+  - docker
   image: docker:latest
+  dependencies:
+    - k8s_dev_deploy
   variables:
     DNS_HOSTNAME: "cluster.local"
   script:
