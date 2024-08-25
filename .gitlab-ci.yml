@@ -8,9 +8,12 @@ workflow:
     - if: '$CI_MERGE_REQUEST_SOURCE_BRANCH_NAME =~ /^feature/ && $CI_PIPELINE_SOURCE == "merge_request_event"'
       when: always
 
-
 include:
-  - template: Code-Quality.gitlab-ci.yml
+  - template: 'Jobs/Code-Quality.gitlab-ci.yml'
+  - template: 'Jobs/SAST.gitlab-ci.yml'
+  - template: 'Jobs/Container-Scanning.gitlab-ci.yml'
+  - template: 'Jobs/Dependency-Scanning.gitlab-ci.yml'
+
 
 stages:
   - build
@@ -146,6 +149,7 @@ k8s_dev_deploy:
     HOST="cluster.local"
     PORT=8443
     echo "Testing connection to $HOST:$PORT"
+    nc -V
     nc -z -w 5 $HOST $PORT
     if [ $? -ne 0 ]; then echo "Host $HOST:$PORT is not reachable."; exit 1; else echo "Host $HOST:$PORT is reachable."; fi
     export KUBECONFIG=$DEV_KUBE_CONFIG
