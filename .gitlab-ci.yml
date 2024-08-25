@@ -149,7 +149,7 @@ k8s_dev_deploy:
     HOST="cluster.local"
     PORT=8443
     echo "Testing connection to $HOST:$PORT"
-    nc -V
+    nc -h
     nc -z -w 5 $HOST $PORT
     if [ $? -ne 0 ]; then echo "Host $HOST:$PORT is not reachable."; exit 1; else echo "Host $HOST:$PORT is reachable."; fi
     export KUBECONFIG=$DEV_KUBE_CONFIG
