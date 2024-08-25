@@ -11,10 +11,7 @@ workflow:
 
 include:
   - template: Code-Quality.gitlab-ci.yml
-  - template: 'Security/SAST.gitlab-ci.yml'
-  - template: 'Security/Container-Scanning.gitlab-ci.yml'
-  - template: 'Security/Dependency-Scanning.gitlab-ci.yml'
-  
+
 stages:
   - build
   - test
@@ -96,25 +93,12 @@ code_quality:
   - docker
   variables:
     REPORT_FORMAT: html
+  after_script: 
+    - ls -l 
   artifacts:
     paths: [gl-code-quality-report.html]
     reports:
       codequality: []
-
-sast:
-  stage: test
-  image: docker:latest
-  tags:
-  - docker
-  services:
-    - docker:24.0.5-dind
-  script:
-    - echo "Running SAST"
-  variables:
-    CI_DEBUG_TRACE: "true"
-  artifacts:
-    reports:
-      sast: gl-sast-report.json
 
 k8s_dev_deploy:
   stage: dev-deploy
@@ -135,12 +119,3 @@ k8s_dev_deploy:
     kubectl apply -f /Kubernetes/deployment.yml
     kubectl apply -f /Kubernetes/service.yml
 
-#helm install netflix-app-chart --generate-name
-
-dast:
-  stage: secure
-  image: docker:latest
-  script:
-    - echo "Running Dynamic Application Security Testing (DAST)"
-  variables:
-    DNS_HOSTNAME: ""
