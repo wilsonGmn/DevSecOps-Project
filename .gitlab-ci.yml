@@ -108,6 +108,8 @@ code_quality:
 sonarqube_scan:
   image: sonarsource/sonar-scanner-cli:latest
   stage: test
+  tags:
+  - docker
   script:
     - sonar-scanner -Dsonar.projectKey=my_project_key -Dsonar.host.url=http://<your-sonarqube-server> -Dsonar.login=$SONARQUBE_TOKEN
   artifacts:
@@ -117,16 +119,19 @@ sonarqube_scan:
 dependency_check:
   image: owasp/dependency-check:latest
   stage: test
+  tags:
+  - docker
   script:
     - dependency-check.sh --project my_project --scan . --format XML --out .
   artifacts:
     paths:
       - dependency-check-report.xml
 
-
 trivy_scan:
   image: aquasec/trivy:latest
   stage: .pre
+  tags:
+  - docker
   script:
     - trivy fs --exit-code 0 --format json --output trivy-report.json .
   artifacts:
@@ -135,6 +140,8 @@ trivy_scan:
 
 trivy_fs_scan:
   stage: .pre
+  tags:
+  - docker
   image: aquasec/trivy:0.36.0
   script:
     - export TRIVY_CACHE_DIR=$(pwd)/.trivy-cache
@@ -147,6 +154,8 @@ trivy_fs_scan:
 
 trivy_image_scan:
   stage: test
+  tags:
+  - docker
   image: aquasec/trivy:0.36.0
   script:
     - export TRIVY_CACHE_DIR=$(pwd)/.trivy-cache
