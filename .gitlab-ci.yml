@@ -10,11 +10,6 @@ workflow:
 
 include:
   - template: 'Jobs/Code-Quality.gitlab-ci.yml'
-  - template: 'Jobs/SAST.gitlab-ci.yml'
-  - template: 'Jobs/Container-Scanning.gitlab-ci.yml'
-  - template: 'Jobs/Dependency-Scanning.gitlab-ci.yml'
-
-
 
 stages:
   - build
@@ -128,8 +123,10 @@ dependency_check:
       - dependency-check-report.xml
 
 trivy_scan:
-  image: aquasec/trivy:latest
+  image: docker:latest
   stage: .pre
+  services:
+    - aquasec/trivy:latest
   tags:
   - docker
   script:
@@ -143,6 +140,8 @@ trivy_fs_scan:
   tags:
   - docker
   image: aquasec/trivy:0.36.0
+  services:
+    - docker:24.0.5-dind
   script:
     - export TRIVY_CACHE_DIR=$(pwd)/.trivy-cache
     - mkdir -p $TRIVY_CACHE_DIR
@@ -157,6 +156,8 @@ trivy_image_scan:
   tags:
   - docker
   image: aquasec/trivy:0.36.0
+  services:
+    - docker:24.0.5-dind
   script:
     - export TRIVY_CACHE_DIR=$(pwd)/.trivy-cache
     - mkdir -p $TRIVY_CACHE_DIR
