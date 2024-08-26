@@ -106,7 +106,7 @@ sonarqube_scan:
   tags:
   - docker
   script:
-    - sonar-scanner -Dsonar.projectKey=my_project_key -Dsonar.host.url=http://<your-sonarqube-server> -Dsonar.login=$SONARQUBE_TOKEN
+    - sonar-scanner -Dsonar.projectKey=netflix-app -Dsonar.host.url=http://sonarqube.local:9000 -Dsonar.login=$SONARQUBE_TOKEN
   artifacts:
     paths:
       - sonar-report.json
@@ -117,7 +117,7 @@ dependency_check:
   tags:
   - docker
   script:
-    - dependency-check.sh --project my_project --scan . --format XML --out .
+    - dependency-check.sh --project netflix-app --scan . --format XML --out .
   artifacts:
     paths:
       - dependency-check-report.xml
