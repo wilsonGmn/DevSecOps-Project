@@ -129,7 +129,7 @@ trivy_scan:
     - docker
   script:
     # Run the Trivy filesystem scan on the current directory
-    - trivy fs --exit-code 0 --format json --output trivy-report.json .
+    - fs --exit-code 0 --format json --output trivy-report.json .
   artifacts:
     paths:
       - trivy-report.json
@@ -143,7 +143,7 @@ trivy_fs_scan:
   script:
     - export TRIVY_CACHE_DIR=$(pwd)/.trivy-cache
     - mkdir -p $TRIVY_CACHE_DIR
-    - trivy fs --cache-dir $TRIVY_CACHE_DIR . > trivyfs.txt
+    - fs --cache-dir $TRIVY_CACHE_DIR . > trivyfs.txt
     - cat trivyfs.txt
   artifacts:
     paths:
@@ -157,7 +157,7 @@ trivy_image_scan:
   script:
     - export TRIVY_CACHE_DIR=$(pwd)/.trivy-cache
     - mkdir -p $TRIVY_CACHE_DIR
-    - trivy image --cache-dir $TRIVY_CACHE_DIR $DOCKER_IMAGE > trivyimage.txt
+    - image --cache-dir $TRIVY_CACHE_DIR $DOCKER_IMAGE > trivyimage.txt
     - cat trivyimage.txt
   artifacts:
     paths:
