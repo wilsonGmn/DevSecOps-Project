@@ -139,7 +139,7 @@ trivy_fs_scan:
   stage: .pre
   tags:
   - docker
-  image: aquasec/trivy:0.36.0
+  image: aquasec/trivy:latest
   script:
     - export TRIVY_CACHE_DIR=$(pwd)/.trivy-cache
     - mkdir -p $TRIVY_CACHE_DIR
@@ -153,7 +153,7 @@ trivy_image_scan:
   stage: test
   tags:
   - docker
-  image: aquasec/trivy:0.36.0
+  image: aquasec/trivy:latest
   script:
     - export TRIVY_CACHE_DIR=$(pwd)/.trivy-cache
     - mkdir -p $TRIVY_CACHE_DIR
