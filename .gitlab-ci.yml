@@ -135,6 +135,7 @@ dependency_check:
   script:
     - docker run --rm \
         -v $(pwd):/project \
+        --log-level debug \
         owasp/dependency-check:latest \
         dependency-check.sh --project netflix-app --scan /project --format XML --out /project
     - ls -l 
@@ -171,7 +172,7 @@ trivy_image_scan:
   tags:
     - docker
   image:
-    name: alpine:latest
+    name: docker:latest
   services:
     - docker:dind
   variables:
@@ -185,6 +186,7 @@ trivy_image_scan:
     - export TRIVY_CACHE_DIR=$(pwd)/.trivy-cache
     - mkdir -p $TRIVY_CACHE_DIR
     - docker run --rm \
+        --log-level debug \
         -v $TRIVY_CACHE_DIR:/root/.cache/ \
         -v /var/run/docker.sock:/var/run/docker.sock \
         $TRIVY_IMAGE \
