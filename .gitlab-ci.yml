@@ -100,12 +100,10 @@ code_quality:
       codequality: []
 
 sonarqube_scan:
-  image: sonarsource/sonar-scanner-cli:latest
+  image: wilsongmn/sonarqube:latest
   stage: test
   tags:
   - docker
-  before_script:
-    - apk add --no-cache curl jq
   script:
     - sonar-scanner -Dsonar.projectKey=netflix-app -Dsonar.host.url=http://sonarqube:9000 -Dsonar.login=$SONARQUBE_TOKEN
     - |
