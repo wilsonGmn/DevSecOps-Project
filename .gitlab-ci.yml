@@ -10,10 +10,6 @@ workflow:
 
 include:
   - template: 'Jobs/Code-Quality.gitlab-ci.yml'
-  - template: 'Jobs/SAST.gitlab-ci.yml'
-  - template: 'Jobs/Container-Scanning.gitlab-ci.yml'
-  - template: 'Jobs/Dependency-Scanning.gitlab-ci.yml'
-
 
 stages:
   - build
@@ -97,47 +93,76 @@ code_quality:
   variables:
     REPORT_FORMAT: html
   after_script: 
-    - ls -l /builds/manager/
+    - ls -l 
   artifacts:
     paths: [gl-code-quality-report.html]
     reports:
       codequality: []
 
-dependency_scanning:
-  stage: test
-  image: docker:latest
-  tags:
-  - docker
-  variables:
-    CI_DEBUG_TRACE: "true"
-  script:
-    - echo "dependency scanning" 
-sast:
-  stage: test
-  tags:
-  - docker
-  image: docker:latest
-  variables:
-    CI_DEBUG_TRACE: "true"
-  artifacts:
-    reports:
-      sast: gl-sast-report.json
-  script:
-    - echo "sast scanning" 
 
-container_scanning:
+sonarqube_scan:
+  image: sonarsource/sonar-scanner-cli:latest
   stage: test
-  image: docker:latest
   tags:
   - docker
-  dependencies:
-    - docker_build
-  variables:
-    GIT_STRATEGY: fetch
-    KLAR_TRACE: "true"
-    CLAIR_TRACE: "true"
   script:
-    - echo "container scanning" 
+    - sonar-scanner -Dsonar.projectKey=netflix-app -Dsonar.host.url=http://sonarqube.local:9000 -Dsonar.login=$SONARQUBE_TOKEN
+  artifacts:
+    paths:
+      - sonar-report.json
+
+dependency_check:
+  image: owasp/dependency-check:latest
+  stage: test
+  tags:
+  - docker
+  script:
+    - dependency-check.sh --project netflix-app --scan . --format XML --out .
+  artifacts:
+    paths:
+      - dependency-check-report.xml
+
+trivy_scan:
+  image: aquasec/trivy:latest
+  stage: .pre
+  tags:
+    - docker
+  script:
+    # Run the Trivy filesystem scan on the current directory
+    - fs --exit-code 0 --format json --output trivy-report.json .
+  artifacts:
+    paths:
+      - trivy-report.json
+
+
+trivy_fs_scan:
+  stage: .pre
+  tags:
+  - docker
+  image: aquasec/trivy:latest
+  script:
+    - export TRIVY_CACHE_DIR=$(pwd)/.trivy-cache
+    - mkdir -p $TRIVY_CACHE_DIR
+    - fs --cache-dir $TRIVY_CACHE_DIR . > trivyfs.txt
+    - cat trivyfs.txt
+  artifacts:
+    paths:
+      - trivyfs.txt
+
+trivy_image_scan:
+  stage: test
+  tags:
+  - docker
+  image: aquasec/trivy:latest
+  script:
+    - export TRIVY_CACHE_DIR=$(pwd)/.trivy-cache
+    - mkdir -p $TRIVY_CACHE_DIR
+    - image --cache-dir $TRIVY_CACHE_DIR $DOCKER_IMAGE > trivyimage.txt
+    - cat trivyimage.txt
+  artifacts:
+    paths:
+      - trivyimage.txt
+
 
 k8s_dev_deploy:
   stage: dev-deploy
@@ -145,19 +170,19 @@ k8s_dev_deploy:
     name: wilsongmn/kubectl:alpine3.7
   dependencies:
     - docker_push
-  script: |
-    HOST="cluster.local"
-    PORT=8443
-    echo "Testing connection to $HOST:$PORT"
-    nc -h
-    nc -z -w 5 $HOST $PORT
-    if [ $? -ne 0 ]; then echo "Host $HOST:$PORT is not reachable."; exit 1; else echo "Host $HOST:$PORT is reachable."; fi
-    export KUBECONFIG=$DEV_KUBE_CONFIG
-    kubectl version -o yaml
-    kubectl config get-contexts
-    kubectl get nodes
-    kubectl apply -f /Kubernetes/deployment.yml
-    kubectl apply -f /Kubernetes/service.yml
+  script:
+    - HOST="cluster.local"
+    - PORT=8443
+    - echo "Testing connection to $HOST:$PORT"
+    - nc -h
+    - nc -z -w 5 $HOST $PORT
+    - if [ $? -ne 0 ]; then echo "Host $HOST:$PORT is not reachable."; exit 1; else echo "Host $HOST:$PORT is reachable."; fi
+    - export KUBECONFIG=$DEV_KUBE_CONFIG
+    - kubectl version -o yaml
+    - kubectl config get-contexts
+    - kubectl get nodes
+    - kubectl apply -f /Kubernetes/deployment.yml
+    - kubectl apply -f /Kubernetes/service.yml
 
 dast:
   stage: secure
