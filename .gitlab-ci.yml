@@ -134,10 +134,9 @@ dependency_check:
     - docker pull owasp/dependency-check:latest 
   script:
     - docker run --rm \
-        -v $(pwd):/project \
-        --log-level debug \
+        -v .:/project \
         owasp/dependency-check:latest \
-        dependency-check.sh --project netflix-app --scan /project --format XML --out /project
+        --version
     - ls -l 
   artifacts:
     paths:
@@ -188,8 +187,7 @@ trivy_image_scan:
     - docker run --rm \
         -v $TRIVY_CACHE_DIR:/root/.cache/ \
         -v /var/run/docker.sock:/var/run/docker.sock \
-        $TRIVY_IMAGE \
-        image netflix-app-tst
+        aquasec/trivy:latest -v
   artifacts:
     paths:
       - trivyimage.txt
@@ -199,6 +197,8 @@ k8s_dev_deploy:
   stage: dev-deploy
   image: 
     name: wilsongmn/kubectl:alpine3.7
+  services:
+    - docker:dind
   dependencies:
     - docker_push
   script:
