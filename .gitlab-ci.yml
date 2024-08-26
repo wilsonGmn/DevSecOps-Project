@@ -123,25 +123,23 @@ dependency_check:
       - dependency-check-report.xml
 
 trivy_scan:
-  image: docker:latest
+  image: aquasec/trivy:latest
   stage: .pre
-  services:
-    - aquasec/trivy:latest
   tags:
-  - docker
+    - docker
   script:
+    # Run the Trivy filesystem scan on the current directory
     - trivy fs --exit-code 0 --format json --output trivy-report.json .
   artifacts:
     paths:
       - trivy-report.json
+
 
 trivy_fs_scan:
   stage: .pre
   tags:
   - docker
   image: aquasec/trivy:0.36.0
-  services:
-    - docker:24.0.5-dind
   script:
     - export TRIVY_CACHE_DIR=$(pwd)/.trivy-cache
     - mkdir -p $TRIVY_CACHE_DIR
@@ -156,8 +154,6 @@ trivy_image_scan:
   tags:
   - docker
   image: aquasec/trivy:0.36.0
-  services:
-    - docker:24.0.5-dind
   script:
     - export TRIVY_CACHE_DIR=$(pwd)/.trivy-cache
     - mkdir -p $TRIVY_CACHE_DIR
