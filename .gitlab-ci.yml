@@ -104,44 +104,59 @@ code_quality:
     reports:
       codequality: []
 
-dependency_scanning:
-  stage: test
-  tags:
-  - docker
-  image: docker:latest
-  variables:
-    CI_DEBUG_TRACE: "true"
-  script:
-    - echo "dependency scanning" 
 
-
-sast:
+sonarqube_scan:
+  image: sonarsource/sonar-scanner-cli:latest
   stage: test
-  tags:
-  - docker
-  image: docker:latest
-  variables:
-    CI_DEBUG_TRACE: "true"
   script:
-    - echo "sast scanning" 
+    - sonar-scanner -Dsonar.projectKey=my_project_key -Dsonar.host.url=http://<your-sonarqube-server> -Dsonar.login=$SONARQUBE_TOKEN
   artifacts:
-    reports:
-      sast: gl-sast-report.json
+    paths:
+      - sonar-report.json
 
-
-container_scanning:
+dependency_check:
+  image: owasp/dependency-check:latest
   stage: test
-  image: docker:latest
-  tags:
-  - docker
-  dependencies:
-    - docker_build
-  variables:
-    GIT_STRATEGY: fetch
-    KLAR_TRACE: "true"
-    CLAIR_TRACE: "true"
   script:
-    - echo "container scanning" 
+    - dependency-check.sh --project my_project --scan . --format XML --out .
+  artifacts:
+    paths:
+      - dependency-check-report.xml
+
+
+trivy_scan:
+  image: aquasec/trivy:latest
+  stage: .pre
+  script:
+    - trivy fs --exit-code 0 --format json --output trivy-report.json .
+  artifacts:
+    paths:
+      - trivy-report.json
+
+trivy_fs_scan:
+  stage: .pre
+  image: aquasec/trivy:0.36.0
+  script:
+    - export TRIVY_CACHE_DIR=$(pwd)/.trivy-cache
+    - mkdir -p $TRIVY_CACHE_DIR
+    - trivy fs --cache-dir $TRIVY_CACHE_DIR . > trivyfs.txt
+    - cat trivyfs.txt
+  artifacts:
+    paths:
+      - trivyfs.txt
+
+trivy_image_scan:
+  stage: test
+  image: aquasec/trivy:0.36.0
+  script:
+    - export TRIVY_CACHE_DIR=$(pwd)/.trivy-cache
+    - mkdir -p $TRIVY_CACHE_DIR
+    - trivy image --cache-dir $TRIVY_CACHE_DIR $DOCKER_IMAGE > trivyimage.txt
+    - cat trivyimage.txt
+  artifacts:
+    paths:
+      - trivyimage.txt
+
 
 k8s_dev_deploy:
   stage: dev-deploy
