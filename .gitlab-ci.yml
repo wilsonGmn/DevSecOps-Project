@@ -106,18 +106,31 @@ sonarqube_scan:
   tags:
   - docker
   script:
-    - sonar-scanner -Dsonar.projectKey=netflix-app -Dsonar.host.url=http://sonarqube.local:9000 -Dsonar.login=$SONARQUBE_TOKEN
+    - sonar-scanner -Dsonar.projectKey=netflix-app -Dsonar.host.url=http://sonarqube:9000 -Dsonar.login=$SONARQUBE_TOKEN
   artifacts:
     paths:
       - sonar-report.json
 
 dependency_check:
-  image: owasp/dependency-check:latest
   stage: test
   tags:
-  - docker
+    - docker
+  image:
+    name: docker:latest
+  services:
+    - docker:dind
+  variables:
+    DOCKER_DRIVER: overlay2
+  before_script:
+    - apk add --no-cache curl jq  # Install necessary tools
+    - docker pull owasp/dependency-check:latest  # Pull the OWASP Dependency-Check Docker image
   script:
-    - dependency-check.sh --project netflix-app --scan . --format XML --out .
+    - docker run --rm \
+        -v $(pwd):/project \
+        -v $CI_PROJECT_DIR/.dependency-check:/root/.cache/ \
+        owasp/dependency-check:latest \
+        dependency-check.sh --project netflix-app --scan /project --format XML --out /project
+    - ls -l /project  # List files in the project directory to ensure the report is created
   artifacts:
     paths:
       - dependency-check-report.xml
@@ -146,27 +159,6 @@ trivy_fs_scan:
     paths:
       - trivyfs.txt
 
-trivy_fs:
-  stage: test
-  image: aquasec/trivy:latest
-  variables:
-    TRIVY_CACHE_DIR: "/root/.cache"
-  script:
-    - echo "Checking Trivy version..."
-    - trivy --version
-    - echo "Setting up Trivy cache directory..."
-    - mkdir -p $TRIVY_CACHE_DIR
-    - echo "Running Trivy scan on the file system..."
-    - trivy fs --cache-dir $TRIVY_CACHE_DIR . > trivyfs.txt
-    - echo "Displaying Trivy scan results..."
-    - cat trivyfs.txt
-  artifacts:
-    paths:
-      - trivyfs.txt
-  tags:
-    - docker
-
-
 trivy_image_scan:
   stage: test
   tags:
@@ -185,12 +177,15 @@ trivy_image_scan:
   script:
     - export TRIVY_CACHE_DIR=$(pwd)/.trivy-cache
     - mkdir -p $TRIVY_CACHE_DIR
-    - docker run --rm -v $TRIVY_CACHE_DIR:/root/.cache/ -v /var/run/docker.sock:/var/run/docker.sock $TRIVY_IMAGE image --cache-dir /root/.cache/ $DOCKER_IMAGE > trivyimage.txt
+    - docker run --rm \
+        -v $TRIVY_CACHE_DIR:/root/.cache/ \
+        -v /var/run/docker.sock:/var/run/docker.sock \
+        $TRIVY_IMAGE \
+        image --cache-dir /root/.cache/ $DOCKER_IMAGE_PREFIX-tst > trivyimage.txt
     - cat trivyimage.txt
   artifacts:
     paths:
       - trivyimage.txt
-
 
 k8s_dev_deploy:
   stage: dev-deploy
