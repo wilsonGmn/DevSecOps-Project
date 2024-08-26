@@ -186,12 +186,10 @@ trivy_image_scan:
     - export TRIVY_CACHE_DIR=$(pwd)/.trivy-cache
     - mkdir -p $TRIVY_CACHE_DIR
     - docker run --rm \
-        --log-level debug \
         -v $TRIVY_CACHE_DIR:/root/.cache/ \
         -v /var/run/docker.sock:/var/run/docker.sock \
         $TRIVY_IMAGE \
-        image --format table --cache-dir /root/.cache/ netflix-app-tst > trivyimage.txt
-    - cat trivyimage.txt
+        image netflix-app-tst
   artifacts:
     paths:
       - trivyimage.txt
