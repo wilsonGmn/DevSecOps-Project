@@ -108,6 +108,7 @@ sonarqube_scan:
   script:
     - sonar-scanner -Dsonar.projectKey=netflix-app -Dsonar.host.url=http://sonarqube:9000 -Dsonar.login=$SONARQUBE_TOKEN
     - |
+      uname -a
       sleep 10
       curl -u $SONARQUBE_TOKEN: http://sonarqube:9000/api/issues/search?componentKeys=netflix-app -o sonar-report.json
   artifacts:
@@ -129,8 +130,7 @@ dependency_check:
   variables:
     DOCKER_DRIVER: overlay2
   before_script:
-    - apk add --no-cache curl jq  # Install necessary tools
-    - docker pull owasp/dependency-check:latest  # Pull the OWASP Dependency-Check Docker image
+    - docker pull owasp/dependency-check:latest 
   script:
     - docker run --rm \
         -v $(pwd):/project \
@@ -189,7 +189,7 @@ trivy_image_scan:
         -v $TRIVY_CACHE_DIR:/root/.cache/ \
         -v /var/run/docker.sock:/var/run/docker.sock \
         $TRIVY_IMAGE \
-        trivy image --cache-dir /root/.cache/ $DOCKER_IMAGE > trivyimage.txt
+        image --cache-dir /root/.cache/ $DOCKER_IMAGE > trivyimage.txt
     - cat trivyimage.txt
   artifacts:
     paths:
