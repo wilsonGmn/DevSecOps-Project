@@ -139,7 +139,7 @@ trivy_fs_scan:
   script:
     - echo "Running Trivy FS scan..."
     - mkdir -p $TRIVY_CACHE_DIR
-    - docker run --rm -v $CI_PROJECT_DIR:/project -v $TRIVY_CACHE_DIR:/root/.cache/ aquasec/trivy:0.36.0 fs --exit-code 0 --format table /project > trivyfs.txt
+    - docker run --rm -v $CI_PROJECT_DIR:/project -v $TRIVY_CACHE_DIR:/root/.cache/ aquasec/trivy:latest fs --exit-code 0 --format table /project > trivyfs.txt
     - cat trivyfs.txt
   artifacts:
     paths:
@@ -163,7 +163,7 @@ trivy_image_scan:
   script:
     - export TRIVY_CACHE_DIR=$(pwd)/.trivy-cache
     - mkdir -p $TRIVY_CACHE_DIR
-    - docker run --rm -v $TRIVY_CACHE_DIR:/root/.cache/ -v /var/run/docker.sock:/var/run/docker.sock aquasec/trivy:0.36.0 image --cache-dir /root/.cache/ $DOCKER_IMAGE > trivyimage.txt
+    - docker run --rm -v $TRIVY_CACHE_DIR:/root/.cache/ -v /var/run/docker.sock:/var/run/docker.sock aquasec/latest image --cache-dir /root/.cache/ $DOCKER_IMAGE > trivyimage.txt
     - cat trivyimage.txt
   artifacts:
     paths:
