@@ -99,18 +99,18 @@ code_quality:
     reports:
       codequality: []
 
-
 sonarqube_scan:
-  image: sonarsource/sonar-scanner-cli:latest
+  image: ubuntu:latest
   stage: test
   tags:
-  - docker
+    - docker
   before_script:
-    - apt install -y curl jq
+    - apt-get update && apt-get install -y curl jq
+    - curl -sL https://deb.sonarsource.com/sonarqube-8.7.0.41497.deb -o sonarqube.deb
+    - apt install -y ./sonarqube.deb
   script:
     - sonar-scanner -Dsonar.projectKey=netflix-app -Dsonar.host.url=http://sonarqube:9000 -Dsonar.login=$SONARQUBE_TOKEN
     - |
-      uname -a
       sleep 10
       curl -u $SONARQUBE_TOKEN: http://sonarqube:9000/api/issues/search?componentKeys=netflix-app -o sonar-report.json
   artifacts:
