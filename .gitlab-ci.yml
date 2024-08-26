@@ -102,6 +102,8 @@ code_quality:
 sonarqube_scan:
   image: wilsongmn/sonarqube:latest
   stage: test
+  services:
+    - docker:dind
   tags:
   - docker
   script:
@@ -124,16 +126,18 @@ dependency_check:
     - docker
   image:
     name: docker:latest
+  services:
+    - docker:dind
   variables:
     DOCKER_DRIVER: overlay2
   before_script:
     - docker pull owasp/dependency-check:latest 
   script:
     - docker run --rm \
-         -v .:/project \
-         owasp/dependency-check:latest \
-         dependency-check.sh --project netflix-app --scan /project --format XML --out /project
-    - ls -l /project  # List files in the project directory to ensure the report is created
+        -v $(pwd):/project \
+        owasp/dependency-check:latest \
+        dependency-check.sh --project netflix-app --scan /project --format XML --out /project
+    - ls -l 
   artifacts:
     paths:
       - dependency-check-report.xml
