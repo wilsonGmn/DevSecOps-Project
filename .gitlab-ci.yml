@@ -128,12 +128,14 @@ trivy_fs_scan:
   stage: .pre
   services:
     - docker:dind
+  tags:
+    - docker
   variables:
     DOCKER_DRIVER: overlay2
     TRIVY_CACHE_DIR: $CI_PROJECT_DIR/.trivy-cache
   before_script:
     - apk add --no-cache curl jq # Install curl and jq
-    - docker pull aquasec/trivy:0.36.0
+    - docker pull aquasec/trivy:latest
   script:
     - echo "Running Trivy FS scan..."
     - mkdir -p $TRIVY_CACHE_DIR
@@ -142,18 +144,26 @@ trivy_fs_scan:
   artifacts:
     paths:
       - trivyfs.txt
-  tags:
-    - docker
+
 
 trivy_image_scan:
   stage: test
   tags:
-  - docker
-  image: aquasec/trivy:latest
+    - docker
+  image:
+    name: docker:latest
+  services:
+    - docker:dind
+  variables:
+    DOCKER_DRIVER: overlay2
+    TRIVY_CACHE_DIR: $CI_PROJECT_DIR/.trivy-cache
+  before_script:
+    - apk add --no-cache curl jq  # Install necessary tools
+    - docker pull aquasec/trivy:latest  # Pull the specific Trivy version
   script:
     - export TRIVY_CACHE_DIR=$(pwd)/.trivy-cache
     - mkdir -p $TRIVY_CACHE_DIR
-    - image --cache-dir $TRIVY_CACHE_DIR $DOCKER_IMAGE > trivyimage.txt
+    - docker run --rm -v $TRIVY_CACHE_DIR:/root/.cache/ -v /var/run/docker.sock:/var/run/docker.sock aquasec/trivy:0.36.0 image --cache-dir /root/.cache/ $DOCKER_IMAGE > trivyimage.txt
     - cat trivyimage.txt
   artifacts:
     paths:
