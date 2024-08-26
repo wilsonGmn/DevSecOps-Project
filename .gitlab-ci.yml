@@ -100,17 +100,16 @@ code_quality:
       codequality: []
 
 sonarqube_scan:
-  image: ubuntu:latest
+  image: sonarsource/sonar-scanner-cli:latest
   stage: test
   tags:
-    - docker
+  - docker
   before_script:
-    - apt-get update && apt-get install -y curl jq
-    - curl -sL https://deb.sonarsource.com/sonarqube-8.7.0.41497.deb -o sonarqube.deb
-    - apt install -y ./sonarqube.deb
+    - apk add --no-cache curl jq
   script:
     - sonar-scanner -Dsonar.projectKey=netflix-app -Dsonar.host.url=http://sonarqube:9000 -Dsonar.login=$SONARQUBE_TOKEN
     - |
+      uname -a
       sleep 10
       curl -u $SONARQUBE_TOKEN: http://sonarqube:9000/api/issues/search?componentKeys=netflix-app -o sonar-report.json
   artifacts:
@@ -120,7 +119,6 @@ sonarqube_scan:
   after_script:
     - echo "SonarQube scan completed."
     - ls -l
-
 
 trivy_fs_scan:
   image:
