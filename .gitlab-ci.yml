@@ -32,7 +32,7 @@ build:
   services: 
     - docker:dind
   variables:
-    IMAGE_TAG: $DOCKER_REGISTRY_URL/$IMAGE_TAG-tst:$CI_COMMIT_SHA
+    IMAGE_TAG: $DOCKER_REGISTRY_URL/$DOCKER_IMAGE_PREFIX-tst:$CI_COMMIT_SHA
   before_script:
     - docker login -u $REGISTRY_USER -p $REGISTRY_PASSWORD $DOCKER_REGISTRY_URL
   script: 
