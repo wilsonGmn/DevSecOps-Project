@@ -177,17 +177,15 @@ sonarqube_scan:
     when: always
   after_script:
     - echo "SonarQube scan completed."
-    - ls -l
 
 # Dependency check job
-dependency_check:
+.dependency_check:
   <<: *docker-setup
   stage: test
   before_script:
     - docker pull owasp/dependency-check:latest
   script:
     - docker run --rm -v $CI_PROJECT_DIR:/project owasp/dependency-check:latest dependency-check.sh --project netflix-app --scan /project --format XML --out /project
-    - ls -l
   artifacts:
     paths:
       - dependency-check-report.xml
@@ -250,7 +248,6 @@ trivy_image_scan:
     - kubectl version -o yaml
     - kubectl config get-contexts
     - kubectl get nodes
-    - ls -l
     - kubectl apply -f ./Kubernetes/deployment.yml
     - kubectl apply -f ./Kubernetes/service.yml
     - kubectl apply -f ./Kubernetes/ingress.yml
