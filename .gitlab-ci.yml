@@ -122,7 +122,7 @@ k8s_dev_deploy:
     - kubectl apply -f ./Kubernetes/service.yml
 
 dast_scan:
-  stage: test
+  stage: secure
   image: owasp/zap2docker-stable:latest  # Image with ZAP, a popular DAST tool
   services:
     - docker:dind  # Docker-in-Docker service to allow Docker commands if needed
