@@ -42,7 +42,9 @@ build:
 code_quality:
   stage: .pre
   tags:
-    - docker 
+    - docker
+  script:
+    - echo "code - quality"
   artifacts:
     paths: [gl-code-quality-report.json]
 
