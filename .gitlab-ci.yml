@@ -120,12 +120,15 @@ k8s_dev_deploy:
     - ls -l
     - kubectl apply -f ./Kubernetes/deployment.yml
     - kubectl apply -f ./Kubernetes/service.yml
+    - kubectl apply -f ./Kubernetes/ingress.yml
 
 dast_scan:
   stage: secure
   image: owasp/zap2docker-stable:latest  # Image with ZAP, a popular DAST tool
   services:
     - docker:dind  # Docker-in-Docker service to allow Docker commands if needed
+  dependencies:
+    - k8s_dev_deploy
   variables:
     DOCKER_DRIVER: overlay2
     ZAP_PORT: 8080  # Port for ZAP to run on
