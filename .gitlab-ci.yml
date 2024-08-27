@@ -1,16 +1,9 @@
 # .gitlab
 
-workflow:
-  name: Build & Deploy
-  rules:
-    - if: '$CI_COMMIT_BRANCH == "main" || $CI_COMMIT_BRANCH =~ /^feature/'
-      when: always
-    - if: '$CI_MERGE_REQUEST_SOURCE_BRANCH_NAME =~ /^feature/ && $CI_PIPELINE_SOURCE == "merge_request_event"'
-      when: always
 
 include:
-  - template: 'Jobs/Code-Quality.gitlab-ci.yml'
-
+#  - template: 'Jobs/Code-Quality.gitlab-ci.yml'
+  - template: 'Jobs/SAST.gitlab-ci.yml'
 stages:
   - build
   - test
@@ -22,27 +15,7 @@ variables:
   DOCKER_REGISTRY_URL: "registry.local:8443"
   PORT: 8080
   DOCKER_DRIVER: overlay2
+  SCAN_KUBERNETES_MANIFESTS: "true"
 
-dast_scan:
+sast:
   stage: .pre
-  image: docker:latest  # Use the Docker image to run DinD
-  services:
-    - docker:dind
-  tags:
-    - docker
-  variables:
-    DOCKER_DRIVER: overlay2
-    ZAP_PORT: 8080
-  script:
-    - echo "Pulling the correct OWASP ZAP Docker image"
-    - docker pull owasp/zap:2.12.0  # Pull the updated ZAP image
-    - echo "Starting ZAP container"
-    - docker run -d --name zap -p 8080:8080 owasp/zap:2.12.0 zap.sh -daemon -host 0.0.0.0 -port 8080
-    - echo "Waiting for ZAP to start..."
-    - sleep 30  # Wait for ZAP to start
-    - echo "Starting DAST scan"
-    - docker run --rm -v $(pwd):/zap/wrk owasp/zap:2.12.0 zap.sh -cmd -quickurl http://netflix.local -quickout /zap/wrk/zap-report.html
-  artifacts:
-    paths:
-      - zap-report.html
-    when: always
