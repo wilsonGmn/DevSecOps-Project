@@ -9,9 +9,9 @@ workflow:
       when: always
 
 include:
-#  - template: 'Jobs/Code-Quality.gitlab-ci.yml'
-#  - template: 'Jobs/SAST.gitlab-ci.yml'
-#  - template: 'Jobs/Secret-Detection.gitlab-ci.yml'
+  - template: 'Jobs/Code-Quality.gitlab-ci.yml'
+  - template: 'Jobs/SAST.gitlab-ci.yml'
+  - template: 'Jobs/Secret-Detection.gitlab-ci.yml'
   - template: 'Jobs/Container-Scanning.gitlab-ci.yml'
   - template: 'Jobs/Dependency-Scanning.gitlab-ci.yml'
 stages:
@@ -38,7 +38,7 @@ build:
     - docker build -t $IMAGE_TAG . 
     - docker push $IMAGE_TAG
 
-.code_quality:
+code_quality:
   stage: .pre
   tags:
     - docker
@@ -47,14 +47,14 @@ build:
   artifacts:
     paths: [gl-code-quality-report.json]
 
-.secret_detection:
+secret_detection:
   stage: .pre
   tags:
     - docker
   variables:
     SECRET_DETECTION_HISTORIC_SCAN: 'true'
 
-.sast:
+sast:
   stage: test
   variables:
     CI_DEBUG_TRACE: "true"
@@ -69,8 +69,6 @@ container_scanning:
   stage: test
   tags:
     - docker
-  services:
-    - docker:latest
   variables:
       GIT_STRATEGY: fetch
       KLAR_TRACE: "true"
