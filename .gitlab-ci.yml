@@ -121,14 +121,22 @@ k8s_dev_deploy:
     - kubectl apply -f ./Kubernetes/deployment.yml
     - kubectl apply -f ./Kubernetes/service.yml
 
-dast:
-  stage: secure
-  tags:
-  - docker
-  image: docker:latest
-  dependencies:
-    - k8s_dev_deploy
+dast_scan:
+  stage: test
+  image: owasp/zap2docker-stable:latest  # Image with ZAP, a popular DAST tool
+  services:
+    - docker:dind  # Docker-in-Docker service to allow Docker commands if needed
   variables:
-    DNS_HOSTNAME: "cluster.local"
+    DOCKER_DRIVER: overlay2
+    ZAP_PORT: 8080  # Port for ZAP to run on
   script:
-    - echo "Dinamic application segurity testing"
+    - echo "Starting ZAP container"
+    - docker run -d --name zap -p 8080:8080 owasp/zap2docker-stable zap.sh -daemon -host 0.0.0.0 -port 8080
+    - echo "Waiting for ZAP to start..."
+    - sleep 30  # Wait for ZAP to start
+    - echo "Starting DAST scan"
+    - docker run --rm -v $(pwd):/zap/wrk owasp/zap2docker-stable zap.sh -cmd -quickurl http://netflix.local -quickout /zap/wrk/zap-report.html
+  artifacts:
+    paths:
+      - zap-report.html
+    when: always
