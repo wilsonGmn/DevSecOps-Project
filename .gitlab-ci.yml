@@ -8,12 +8,16 @@ workflow:
     - if: '$CI_MERGE_REQUEST_SOURCE_BRANCH_NAME =~ /^feature/ && $CI_PIPELINE_SOURCE == "merge_request_event"'
       when: always
 
+default:
+  tags:
+    - docker
+
 include:
   - template: 'Jobs/Code-Quality.gitlab-ci.yml'
-  - template: 'Jobs/SAST.gitlab-ci.yml'
-  - template: 'Jobs/Secret-Detection.gitlab-ci.yml'
-  - template: 'Jobs/Container-Scanning.gitlab-ci.yml'
-  - template: 'Jobs/Dependency-Scanning.gitlab-ci.yml'
+#  - template: 'Jobs/SAST.gitlab-ci.yml'
+#  - template: 'Jobs/Secret-Detection.gitlab-ci.yml'
+#  - template: 'Jobs/Container-Scanning.gitlab-ci.yml'
+#  - template: 'Jobs/Dependency-Scanning.gitlab-ci.yml'
 stages:
   - build
   - test
@@ -26,7 +30,21 @@ variables:
   PORT: 8080
   DOCKER_DRIVER: overlay2
 
-build:
+# Anchor for Docker configuration
+.docker-setup: &docker-setup
+  image: docker:24.0.5
+  services:
+    - docker:24.0.5-dind
+  variables:
+    DOCKER_DRIVER: overlay2
+
+# Base job for Docker build and push tasks
+.docker-job: &docker-job
+  <<: *docker-setup
+  script:
+    - echo "Starting Docker operations..."
+
+.build:
   stage: build
   tags:
     - docker
@@ -38,23 +56,77 @@ build:
     - docker build -t $IMAGE_TAG . 
     - docker push $IMAGE_TAG
 
+# Docker build job
+docker_build:
+  <<: *docker-job
+  stage: build
+  script:
+    - echo "Building Docker image..."
+    - docker build --build-arg TMDB_V3_API_KEY=$TMDB_V3_API_KEY -t $DOCKER_IMAGE_PREFIX-tst .
+    - docker images $DOCKER_IMAGE_PREFIX-tst
+    - mkdir -p image
+    - docker save $DOCKER_IMAGE_PREFIX-tst > image/$DOCKER_IMAGE_PREFIX-tst-$CI_PIPELINE_ID.tar
+  artifacts:
+    when: on_success
+    paths:
+      - image
+    expire_in: 1 day
+
+# Docker test job
+docker_test:
+  <<: *docker-job
+  stage: build
+  needs:
+    - docker_build
+  dependencies:
+    - docker_build
+  script: |
+    docker load -i image/$DOCKER_IMAGE_PREFIX-tst-$CI_PIPELINE_ID.tar
+    docker run --rm -d --name $DOCKER_IMAGE_PREFIX-tst -p $PORT:80 --network minikube $DOCKER_IMAGE_PREFIX-tst
+    export containerIP=$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' $DOCKER_IMAGE_PREFIX-tst)
+    echo "Container IP: $containerIP"
+    sleep 10
+    echo "Checking container status..."
+    docker run --rm --network minikube alpine/curl curl --fail http://${containerIP}:80 || { echo "Error: Failed to connect to ${containerIP}:80"; exit 1; }
+    echo "Stopping Docker container..."
+    docker stop $DOCKER_IMAGE_PREFIX-tst
+
+# Docker push job
+docker_push:
+  <<: *docker-job
+  stage: build
+  needs:
+    - docker_build
+  script: 
+    - HOST="registry.local"
+    - PORT=8443
+    - echo "Testing connection to $HOST:$PORT"
+    - nc -z -w 5 $HOST $PORT
+    - if [ $? -ne 0 ]; then echo "Host $HOST:$PORT is not reachable."; exit 1; else echo "Host $HOST:$PORT is reachable."; fi
+    - docker load -i image/$DOCKER_IMAGE_PREFIX-tst-$CI_PIPELINE_ID.tar
+    - echo "$DOCKER_IMAGE_PREFIX-tst $DOCKER_REGISTRY_URL"
+    - docker login -u $REGISTRY_USER -p $REGISTRY_PASSWORD $DOCKER_REGISTRY_URL
+    - docker tag $DOCKER_IMAGE_PREFIX-tst $DOCKER_REGISTRY_URL/netflix-app/$DOCKER_IMAGE_PREFIX-tst
+    - docker push $DOCKER_REGISTRY_URL/netflix-app/$DOCKER_IMAGE_PREFIX-tst
+
 code_quality:
   stage: .pre
-  tags:
-    - docker
-  script:
-    - echo "code - quality"
+  <<: *docker-setup
+  variables:
+    REPORT_FORMAT: html
   artifacts:
-    paths: [gl-code-quality-report.json]
+    paths: [gl-code-quality-report.html]
+    reports:
+      codequality: []
 
-secret_detection:
+.secret_detection:
   stage: .pre
   tags:
     - docker
   variables:
     SECRET_DETECTION_HISTORIC_SCAN: 'true'
 
-sast:
+.sast:
   stage: test
   variables:
     CI_DEBUG_TRACE: "true"
@@ -65,7 +137,7 @@ sast:
     reports:
       sast: gl-sast-report.json
 
-container_scanning:
+.container_scanning:
   stage: test
   tags:
     - docker
@@ -78,10 +150,109 @@ container_scanning:
     - docker login -u $REGISTRY_USER -p $REGISTRY_PASSWORD $DOCKER_REGISTRY_URL
   allow_failure: true
 
-dependency_scanning:
+.dependency_scanning:
   stage: test
   tags:
     - docker 
   variables:
     CI_DEBUG_TRACE: "true"
+
+
+##################################################################################
+
+
+# SonarQube scan job
+sonarqube_scan:
+  <<: *docker-setup
+  stage: test
+  script:
+    - sonar-scanner -Dsonar.projectKey=netflix-app -Dsonar.host.url=http://sonarqube:9000 -Dsonar.login=$SONARQUBE_TOKEN
+    - |
+      uname -a
+      sleep 10
+      curl -u $SONARQUBE_TOKEN: http://sonarqube:9000/api/issues/search?componentKeys=netflix-app -o sonar-report.json
+  artifacts:
+    paths:
+      - sonar-report.json
+    when: always
+  after_script:
+    - echo "SonarQube scan completed."
+    - ls -l
+
+# Dependency check job
+dependency_check:
+  <<: *docker-setup
+  stage: test
+  before_script:
+    - docker pull owasp/dependency-check:latest
+  script:
+    - docker run --rm -v $CI_PROJECT_DIR:/project owasp/dependency-check:latest dependency-check.sh --project netflix-app --scan /project --format XML --out /project
+    - ls -l
+  artifacts:
+    paths:
+      - dependency-check-report.xml
+
+# Trivy file system scan job
+trivy_fs_scan:
+  <<: *docker-setup
+  stage: .pre
+  variables:
+    TRIVY_CACHE_DIR: $CI_PROJECT_DIR/.trivy-cache
+    TRIVY_IMAGE: aquasec/trivy:latest
+  before_script:
+    - apk add --no-cache curl jq
+    - docker pull $TRIVY_IMAGE
+  script:
+    - echo "Running Trivy FS scan..."
+    - mkdir -p $TRIVY_CACHE_DIR
+    - docker run --rm -v $CI_PROJECT_DIR:/project -v $TRIVY_CACHE_DIR:/root/.cache/ $TRIVY_IMAGE fs --exit-code 0 --format table /project > trivyfs.txt
+    - cat trivyfs.txt
+  artifacts:
+    paths:
+      - trivyfs.txt
+
+# Trivy image scan job
+trivy_image_scan:
+  <<: *docker-setup
+  stage: test
+  variables:
+    TRIVY_IMAGE: aquasec/trivy:latest
+    DOCKER_IMAGE: $DOCKER_IMAGE_PREFIX-tst
+    TRIVY_CACHE_DIR: $CI_PROJECT_DIR/.trivy-cache
+  before_script:
+    - apk add --no-cache curl jq
+    - docker pull $TRIVY_IMAGE
+  script:
+    - echo "Running Trivy Image scan..."
+    - mkdir -p $TRIVY_CACHE_DIR
+    - docker run --rm -v $TRIVY_CACHE_DIR:/root/.cache/ -v /var/run/docker.sock:/var/run/docker.sock $TRIVY_IMAGE image --format table --cache-dir /root/.cache/ $DOCKER_IMAGE > trivyimage.txt
+  artifacts:
+    paths:
+      - trivyimage.txt
+
+########################################################################
+
+.k8s_dev_deploy:
+  stage: dev-deploy
+  image:
+    name: wilsongmn/kubectl:alpine3.7
+  services:
+    - docker:dind
+  dependencies:
+    - docker_push
+  script:
+    - HOST="cluster.local"
+    - PORT=8443
+    - echo "Testing connection to $HOST:$PORT"
+    - nc -z -w 5 $HOST $PORT
+    - if [ $? -ne 0 ]; then echo "Host $HOST:$PORT is not reachable."; exit 1; else echo "Host $HOST:$PORT is reachable."; fi
+    - export KUBECONFIG=$DEV_KUBE_CONFIG
+    - kubectl version -o yaml
+    - kubectl config get-contexts
+    - kubectl get nodes
+    - ls -l
+    - kubectl apply -f ./Kubernetes/deployment.yml
+    - kubectl apply -f ./Kubernetes/service.yml
+    - kubectl apply -f ./Kubernetes/ingress.yml
+
 
