@@ -9,6 +9,7 @@ workflow:
       when: always
 
 
+
 include:
 #  - template: 'Jobs/Code-Quality.gitlab-ci.yml'
   - template: 'Jobs/SAST.gitlab-ci.yml'
@@ -30,12 +31,16 @@ sast:
   variables:
     CI_DEBUG_TRACE: "true"
     SCAN_KUBERNETES_MANIFESTS: "true"
+  tags:
+    - docker 
   artifacts:
     reports:
       sast: gl-sast-report.json
 
 secret_detection:
   stage: .pre
+  tags:
+    - docker
   variables:
     SECRET_DETECTION_HISTORIC_SCAN: 'true'
 
