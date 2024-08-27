@@ -12,6 +12,7 @@ workflow:
 include:
 #  - template: 'Jobs/Code-Quality.gitlab-ci.yml'
   - template: 'Jobs/SAST.gitlab-ci.yml'
+  - template: 'Jobs/Secret-Detection.gitlab-ci.yml'
 stages:
   - build
   - test
@@ -32,4 +33,9 @@ sast:
   artifacts:
     reports:
       sast: gl-sast-report.json
+
+secret_detection:
+  stage: .pre
+  variables:
+    SECRET_DETECTION_HISTORIC_SCAN: 'true'
 
