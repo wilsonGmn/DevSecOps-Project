@@ -71,7 +71,7 @@ docker_build:
     expire_in: 1 day
 
 # Docker test job
-docker_test:
+.docker_test:
   <<: *docker-job
   stage: build
   needs:
@@ -117,14 +117,14 @@ docker_push:
     reports:
       codequality: []
 
-secret_detection:
+.secret_detection:
   stage: .pre
   tags:
     - docker
   variables:
     SECRET_DETECTION_HISTORIC_SCAN: 'true'
 
-sast:
+.sast:
   stage: test
   variables:
     CI_DEBUG_TRACE: "true"
@@ -135,7 +135,7 @@ sast:
     reports:
       sast: gl-sast-report.json
 
-container_scanning:
+.container_scanning:
   stage: test
   tags:
     - docker
