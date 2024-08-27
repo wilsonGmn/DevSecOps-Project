@@ -8,12 +8,11 @@ workflow:
     - if: '$CI_MERGE_REQUEST_SOURCE_BRANCH_NAME =~ /^feature/ && $CI_PIPELINE_SOURCE == "merge_request_event"'
       when: always
 
-
-
 include:
 #  - template: 'Jobs/Code-Quality.gitlab-ci.yml'
   - template: 'Jobs/SAST.gitlab-ci.yml'
   - template: 'Jobs/Secret-Detection.gitlab-ci.yml'
+  - template: 'Jobs/Container-Scanning.gitlab-ci.yml'
 stages:
   - build
   - test
@@ -26,6 +25,34 @@ variables:
   PORT: 8080
   DOCKER_DRIVER: overlay2
 
+build:
+  stage: build
+  tags:
+    - docker
+  services: 
+    - docker:dind
+  variables:
+    IMAGE_TAG: $DOCKER_REGISTRY_URL/$IMAGE_TAG-tst:$CI_COMMIT_SHA
+  before_script:
+    - docker login -u $REGISTRY_USER -p $REGISTRY_PASSWORD $DOCKER_REGISTRY_URL
+  script: 
+    - docker build -t $IMAGE_TAG . 
+    - docker push $IMAGE_TAG
+
+code_quality:
+  stage: .pre
+  tags:
+    - docker 
+  artifacts:
+    paths: [gl-code-quality-report.json]
+
+secret_detection:
+  stage: .pre
+  tags:
+    - docker
+  variables:
+    SECRET_DETECTION_HISTORIC_SCAN: 'true'
+
 sast:
   stage: test
   variables:
@@ -37,10 +64,14 @@ sast:
     reports:
       sast: gl-sast-report.json
 
-secret_detection:
-  stage: .pre
+container_scanning:
+  stage: test
   tags:
-    - docker
+    - docker 
   variables:
-    SECRET_DETECTION_HISTORIC_SCAN: 'true'
+      GIT_STRATEGY: fetch
+      KLAR_TRACE: "true"
+      CLAIR_TRACE: "true"
+
+
 
