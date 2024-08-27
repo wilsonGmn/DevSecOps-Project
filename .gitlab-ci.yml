@@ -68,7 +68,9 @@ build:
 container_scanning:
   stage: test
   tags:
-    - docker 
+    - docker
+  services:
+    - docker:latest
   variables:
       GIT_STRATEGY: fetch
       KLAR_TRACE: "true"
