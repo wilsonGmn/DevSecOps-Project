@@ -117,14 +117,14 @@ code_quality:
     reports:
       codequality: []
 
-.secret_detection:
+secret_detection:
   stage: .pre
   tags:
     - docker
   variables:
     SECRET_DETECTION_HISTORIC_SCAN: 'true'
 
-.sast:
+sast:
   stage: test
   variables:
     CI_DEBUG_TRACE: "true"
