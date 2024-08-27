@@ -8,10 +8,6 @@ workflow:
     - if: '$CI_MERGE_REQUEST_SOURCE_BRANCH_NAME =~ /^feature/ && $CI_PIPELINE_SOURCE == "merge_request_event"'
       when: always
 
-default:
-  tags:
-    - docker
-
 include:
   - template: 'Jobs/Code-Quality.gitlab-ci.yml'
 #  - template: 'Jobs/SAST.gitlab-ci.yml'
@@ -33,6 +29,8 @@ variables:
 # Anchor for Docker configuration
 .docker-setup: &docker-setup
   image: docker:24.0.5
+  tags:
+    - docker
   services:
     - docker:24.0.5-dind
   variables:
