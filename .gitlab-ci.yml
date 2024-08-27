@@ -30,8 +30,6 @@ build:
   stage: build
   tags:
     - docker
-  services: 
-    - docker:dind
   variables:  
     IMAGE_TAG: $DOCKER_REGISTRY_URL/netflix-app/$DOCKER_IMAGE_PREFIX-tst:$CI_COMMIT_SHA
   before_script:
@@ -71,7 +69,8 @@ container_scanning:
   stage: test
   tags:
     - docker 
-  image: docker:latest
+  services: 
+    - docker:dind
   variables:
       GIT_STRATEGY: fetch
       KLAR_TRACE: "true"
