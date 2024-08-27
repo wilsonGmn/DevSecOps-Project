@@ -1,5 +1,13 @@
 # .gitlab
 
+workflow:
+  name: Build & Deploy
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main" || $CI_COMMIT_BRANCH =~ /^feature/'
+      when: always
+    - if: '$CI_MERGE_REQUEST_SOURCE_BRANCH_NAME =~ /^feature/ && $CI_PIPELINE_SOURCE == "merge_request_event"'
+      when: always
+
 
 include:
 #  - template: 'Jobs/Code-Quality.gitlab-ci.yml'
@@ -15,7 +23,13 @@ variables:
   DOCKER_REGISTRY_URL: "registry.local:8443"
   PORT: 8080
   DOCKER_DRIVER: overlay2
-  SCAN_KUBERNETES_MANIFESTS: "true"
 
 sast:
-  stage: .pre
+  stage: test
+  variables:
+    CI_DEBUG_TRACE: "true"
+    SCAN_KUBERNETES_MANIFESTS: "true"
+  artifacts:
+    reports:
+      sast: gl-sast-report.json
+
