@@ -23,6 +23,7 @@ variables:
   PORT: 8080
   DOCKER_DRIVER: overlay2
 
+
 docker_build:
   stage: build
   image: docker:24.0.5
