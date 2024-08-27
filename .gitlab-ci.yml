@@ -13,6 +13,7 @@ include:
   - template: 'Jobs/SAST.gitlab-ci.yml'
   - template: 'Jobs/Secret-Detection.gitlab-ci.yml'
   - template: 'Jobs/Container-Scanning.gitlab-ci.yml'
+
 stages:
   - build
   - test
@@ -74,6 +75,12 @@ container_scanning:
       GIT_STRATEGY: fetch
       KLAR_TRACE: "true"
       CLAIR_TRACE: "true"
-
+  before_script:
+    # Use docker login to authenticate to your Docker registry
+    - docker login -u $REGISTRY_USER -p $REGISTRY_PASSWORD $DOCKER_REGISTRY_URL
+  script:
+    # Run your container scanning tool here
+    - echo "Running container scanning..."
+    - ./klar --some-options
 
 
