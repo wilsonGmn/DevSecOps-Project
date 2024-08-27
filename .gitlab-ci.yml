@@ -23,107 +23,8 @@ variables:
   PORT: 8080
   DOCKER_DRIVER: overlay2
 
-docker_build:
-  stage: build
-  image: docker:24.0.5
-  tags:
-    - docker
-  script:
-    - echo "Building Docker image..."
-    - docker build --build-arg TMDB_V3_API_KEY=$TMDB_V3_API_KEY -t $DOCKER_IMAGE_PREFIX-tst .
-    - docker images $DOCKER_IMAGE_PREFIX-tst
-    - mkdir -p image
-    - docker save $DOCKER_IMAGE_PREFIX-tst > image/$DOCKER_IMAGE_PREFIX-tst-$CI_PIPELINE_ID.tar
-  artifacts:
-    when: on_success
-    paths:
-      - image
-    expire_in: 1 day
-
-docker_test:
-  stage: build
-  image: docker:24.0.5
-  needs:
-    - docker_build
-  tags:
-    - docker
-  dependencies:
-    - docker_build
-  script: |
-    echo "Loading Docker image..."
-    docker load -i image/$DOCKER_IMAGE_PREFIX-tst-$CI_PIPELINE_ID.tar
-    echo "Running Docker container..."
-    docker run --rm -d --name $DOCKER_IMAGE_PREFIX-tst -p $PORT:80 --network minikube $DOCKER_IMAGE_PREFIX-tst
-    export containerIP=$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' $DOCKER_IMAGE_PREFIX-tst)
-    echo "Container IP: $IP"
-    sleep 10
-    echo "Checking container status..."
-    docker run --rm --network minikube alpine/curl curl --fail http://${containerIP}:80 || { echo "Error: Failed to connect to ${containerIP}:80"; exit 1; }
-    echo "Stopping Docker container..."
-    docker stop $DOCKER_IMAGE_PREFIX-tst
-
-
-docker_push:
-  stage: build
-  needs:
-    - docker_build
-  image: docker:24.0.5
-  tags:
-    - docker
-  services:
-    - docker:24.0.5-dind
-  script:
-    - HOST="registry.local"
-    - PORT=8443
-    - echo "Testing connection to $HOST:$PORT"
-    - nc -z -w 5 $HOST $PORT
-    - if [ $? -ne 0 ]; then echo "Host $HOST:$PORT is not reachable."; exit 1; else echo "Host $HOST:$PORT is reachable."; fi
-    - docker load -i image/$DOCKER_IMAGE_PREFIX-tst-$CI_PIPELINE_ID.tar
-    - echo "$DOCKER_IMAGE_PREFIX-tst $DOCKER_REGISTRY_URL"
-    - docker login -u $REGISTRY_USER -p $REGISTRY_PASSWORD $DOCKER_REGISTRY_URL
-    - docker tag $DOCKER_IMAGE_PREFIX-tst $DOCKER_REGISTRY_URL/netflix-app/$DOCKER_IMAGE_PREFIX-tst
-    - docker push $DOCKER_REGISTRY_URL/netflix-app/$DOCKER_IMAGE_PREFIX-tst
-
-
-code_quality:
-  stage: ".pre"
-  image: docker:latest
-  tags:
-  - docker
-  variables:
-    REPORT_FORMAT: html
-  after_script: 
-    - ls -l 
-  artifacts:
-    paths: [gl-code-quality-report.html]
-    reports:
-      codequality: []
-
-k8s_dev_deploy:
-  stage: dev-deploy
-  image: 
-    name: wilsongmn/kubectl:alpine3.7
-  services:
-    - docker:dind
-  dependencies:
-    - docker_push
-  script:
-    - HOST="cluster.local"
-    - PORT=8443
-    - echo "Testing connection to $HOST:$PORT"
-    - nc -z -w 5 $HOST $PORT
-    - if [ $? -ne 0 ]; then echo "Host $HOST:$PORT is not reachable."; exit 1; else echo "Host $HOST:$PORT is reachable."; fi
-    - export KUBECONFIG=$DEV_KUBE_CONFIG
-    - kubectl version -o yaml
-    - kubectl config get-contexts
-    - kubectl get nodes
-    - ls -l
-    - kubectl apply -f ./Kubernetes/deployment.yml
-    - kubectl apply -f ./Kubernetes/service.yml
-    - kubectl apply -f ./Kubernetes/ingress.yml
-
 dast_scan:
-  stage: secure
+  stage: .pre
   image: owasp/zap2docker-stable:latest  # Image with ZAP, a popular DAST tool
   services:
     - docker:dind  # Docker-in-Docker service to allow Docker commands if needed
@@ -134,11 +35,11 @@ dast_scan:
     ZAP_PORT: 8080  # Port for ZAP to run on
   script:
     - echo "Starting ZAP container"
-    - docker run -d --name zap -p 8080:8080 owasp/zap2docker-stable zap.sh -daemon -host 0.0.0.0 -port 8080
+    - docker run -d -v /var/run/docker.sock:/var/run/docker.sock --name zap -p 8080:8080 owasp/zap2docker-stable zap.sh -daemon -host 0.0.0.0 -port 8080
     - echo "Waiting for ZAP to start..."
     - sleep 30  # Wait for ZAP to start
     - echo "Starting DAST scan"
-    - docker run --rm -v $(pwd):/zap/wrk owasp/zap2docker-stable zap.sh -cmd -quickurl http://netflix.local -quickout /zap/wrk/zap-report.html
+    - docker run --rm -v /var/run/docker.sock:/var/run/docker.sock -v $(pwd):/zap/wrk owasp/zap2docker-stable zap.sh -cmd -quickurl http://netflix.local -quickout /zap/wrk/zap-report.html
   artifacts:
     paths:
       - zap-report.html
