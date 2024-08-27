@@ -12,7 +12,7 @@ include:
   - template: 'Jobs/Code-Quality.gitlab-ci.yml'
   - template: 'Jobs/SAST.gitlab-ci.yml'
   - template: 'Jobs/Secret-Detection.gitlab-ci.yml'
-#  - template: 'Jobs/Container-Scanning.gitlab-ci.yml'
+  - template: 'Jobs/Container-Scanning.gitlab-ci.yml'
 #  - template: 'Jobs/Dependency-Scanning.gitlab-ci.yml'
 stages:
   - build
@@ -107,7 +107,7 @@ docker_push:
     - docker tag $DOCKER_IMAGE_PREFIX-tst $DOCKER_REGISTRY_URL/netflix-app/$DOCKER_IMAGE_PREFIX-tst
     - docker push $DOCKER_REGISTRY_URL/netflix-app/$DOCKER_IMAGE_PREFIX-tst
 
-code_quality:
+.code_quality:
   stage: .pre
   <<: *docker-setup
   variables:
@@ -135,19 +135,14 @@ sast:
     reports:
       sast: gl-sast-report.json
 
-.container_scanning:
+container_scanning:
   stage: test
   tags:
     - docker
+  needs:
+    - docker_push
   variables:
-      GIT_STRATEGY: fetch
-      KLAR_TRACE: "true"
-      CLAIR_TRACE: "true"
-  before_script:
-    # Use docker login to authenticate to your Docker registry
-    - docker login -u $REGISTRY_USER -p $REGISTRY_PASSWORD $DOCKER_REGISTRY_URL
-  allow_failure: true
-
+    CS_IMAGE: $DOCKER_REGISTRY_URL/netflix-app/$DOCKER_IMAGE_PREFIX-tst
 .dependency_scanning:
   stage: test
   tags:
@@ -156,7 +151,7 @@ sast:
     CI_DEBUG_TRACE: "true"
 
 ##################################################################################
-sonarqube_scan:
+.sonarqube_scan:
   image: wilsongmn/sonarqube:latest
   stage: test
   services:
@@ -196,7 +191,7 @@ sonarqube_scan:
     paths:
       - dependency-check-report.xml
 
-trivy_fs_scan:
+.trivy_fs_scan:
   image:
     name: docker:latest
   stage: .pre
@@ -221,7 +216,7 @@ trivy_fs_scan:
       - trivyfs.txt
 
 
-trivy_image_scan:
+.trivy_image_scan:
   stage: test
   tags:
     - docker
