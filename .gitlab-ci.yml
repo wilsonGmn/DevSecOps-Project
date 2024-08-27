@@ -71,8 +71,7 @@ container_scanning:
   stage: test
   tags:
     - docker 
-  services:
-    - docker:dind
+  image: docker:latest
   variables:
       GIT_STRATEGY: fetch
       KLAR_TRACE: "true"
