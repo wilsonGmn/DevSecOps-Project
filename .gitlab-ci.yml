@@ -111,15 +111,15 @@ k8s_dev_deploy:
     - HOST="cluster.local"
     - PORT=8443
     - echo "Testing connection to $HOST:$PORT"
-    - nc -h
     - nc -z -w 5 $HOST $PORT
     - if [ $? -ne 0 ]; then echo "Host $HOST:$PORT is not reachable."; exit 1; else echo "Host $HOST:$PORT is reachable."; fi
     - export KUBECONFIG=$DEV_KUBE_CONFIG
     - kubectl version -o yaml
     - kubectl config get-contexts
     - kubectl get nodes
-    - kubectl apply -f /Kubernetes/deployment.yml
-    - kubectl apply -f /Kubernetes/service.yml
+    - ls -l
+    - kubectl apply -f ./Kubernetes/deployment.yml
+    - kubectl apply -f ./Kubernetes/service.yml
 
 dast:
   stage: secure
