@@ -1,0 +1,16 @@
+<html><body><table border='1'><tr><th>Name</th><th>Description</th><th>Severity</th><th>File</th><th>Start Line</th></tr>
+<tr><td>.metadata .annotations ."container.apparmor.security.beta.kubernetes.io/nginx"</td><td>Well defined AppArmor policies may provide greater protection from unknown threats. WARNING: NOT PRODUCTION READY</td><td>Info</td><td>/Kubernetes/deployment.yml</td><td>null</td></tr>
+<tr><td>.metadata .annotations ."container.seccomp.security.alpha.kubernetes.io/pod"</td><td>Seccomp profiles set minimum privilege and secure against unknown threats</td><td>Info</td><td>/Kubernetes/deployment.yml</td><td>null</td></tr>
+<tr><td>.spec, .spec.containers[] | .securityContext .runAsGroup -gt 10000</td><td>Run as a high-UID group to avoid conflicts with the host's groups</td><td>Info</td><td>/Kubernetes/deployment.yml</td><td>null</td></tr>
+<tr><td>.spec, .spec.containers[] | .securityContext .runAsNonRoot == true</td><td>Force the running image to run as a non-root user to ensure least privilege</td><td>Info</td><td>/Kubernetes/deployment.yml</td><td>null</td></tr>
+<tr><td>.spec, .spec.containers[] | .securityContext .runAsUser -gt 10000</td><td>Run as a high-UID user to avoid conflicts with the host's users</td><td>Info</td><td>/Kubernetes/deployment.yml</td><td>null</td></tr>
+<tr><td>.spec .automountServiceAccountToken == false</td><td>Disabling the automounting of Service Account Token reduces the attack surface of the API server</td><td>Info</td><td>/Kubernetes/deployment.yml</td><td>null</td></tr>
+<tr><td>.spec .serviceAccountName</td><td>Service accounts restrict Kubernetes API access and should be configured with least privilege</td><td>Info</td><td>/Kubernetes/deployment.yml</td><td>null</td></tr>
+<tr><td>containers[] .resources .limits .cpu</td><td>Enforcing CPU limits prevents DOS via resource exhaustion</td><td>Info</td><td>/Kubernetes/deployment.yml</td><td>null</td></tr>
+<tr><td>containers[] .resources .limits .memory</td><td>Enforcing memory limits prevents DOS via resource exhaustion</td><td>Info</td><td>/Kubernetes/deployment.yml</td><td>null</td></tr>
+<tr><td>containers[] .resources .requests .cpu</td><td>Enforcing CPU requests aids a fair balancing of resources across the cluster</td><td>Info</td><td>/Kubernetes/deployment.yml</td><td>null</td></tr>
+<tr><td>containers[] .resources .requests .memory</td><td>Enforcing memory requests aids a fair balancing of resources across the cluster</td><td>Info</td><td>/Kubernetes/deployment.yml</td><td>null</td></tr>
+<tr><td>containers[] .securityContext .capabilities .drop</td><td>Reducing kernel capabilities available to a container limits its attack surface</td><td>Info</td><td>/Kubernetes/deployment.yml</td><td>null</td></tr>
+<tr><td>containers[] .securityContext .capabilities .drop | index("ALL")</td><td>Drop all capabilities and add only those required to reduce syscall attack surface</td><td>Info</td><td>/Kubernetes/deployment.yml</td><td>null</td></tr>
+<tr><td>containers[] .securityContext .readOnlyRootFilesystem == true</td><td>An immutable root filesystem can prevent malicious binaries being added to PATH and increase attack cost</td><td>Info</td><td>/Kubernetes/deployment.yml</td><td>null</td></tr>
+</table></body></html>

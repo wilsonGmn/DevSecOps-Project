@@ -1,0 +1,25 @@
+<html><head><title>SAST Report - semgrep-sast</title></head><body><h1>SAST Report - semgrep-sast</h1><table border='1'><tr><th>Name</th><th>Description</th><th>Severity</th><th>File</th><th>Start Line</th></tr>
+<tr><td>Use of cryptographically weak pseudo-random number generator (PRNG)</td><td>This rule identifies use of cryptographically weak random number generators.
+Using cryptographically weak random number generators like `crypto.pseudoRandomBytes()` 
+and `Math.random()` for security-critical tasks can expose systems to significant 
+vulnerabilities. Attackers might predict the generated random numbers, compromising 
+the integrity and confidentiality of cryptographic operations. This could lead to 
+breaches where sensitive data is accessed or manipulated, authentication mechanisms 
+are bypassed, or secure communications are intercepted, ultimately undermining the 
+security of the entire system or application.
+
+Mitigation strategy:
+Replace the use of these cryptographically weak random number generators with 
+`crypto.randomBytes()`, a method provided by Node.js's `crypto` module that 
+generates cryptographically secure random numbers. This method should be used 
+for all operations requiring secure randomness, such as generating keys, tokens, 
+or any cryptographic material.
+
+Secure Code Example:
+```
+const crypto = require('crypto');
+const secureBytes = crypto.randomBytes(256);
+console.log(`Secure random bytes: ${secureBytes.toString('hex')}`);
+```
+</td><td>Medium</td><td>src/utils/common.ts</td><td>2</td></tr>
+</table></body></html>
