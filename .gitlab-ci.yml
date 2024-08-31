@@ -1,16 +1,20 @@
 # .gitlab
 
-workflow:
-  name: Build & Deploy
-  rules:
-    - if: '$CI_COMMIT_BRANCH == "main" || $CI_COMMIT_BRANCH =~ /^feature/'
-      when: always
-    - if: '$CI_MERGE_REQUEST_SOURCE_BRANCH_NAME =~ /^feature/ && $CI_PIPELINE_SOURCE == "merge_request_event"'
-      when: always
+#workflow:
+#  name: Build & Deploy
+#  rules:
+#    - if: '$CI_COMMIT_BRANCH == "main" || $CI_COMMIT_BRANCH =~ /^feature/'
+#      when: always
+#    - if: '$CI_MERGE_REQUEST_SOURCE_BRANCH_NAME =~ /^feature/ && $CI_PIPELINE_SOURCE == "merge_request_event"'
+#      when: always
 
 include:
   - template: 'Jobs/Code-Quality.gitlab-ci.yml'
-
+  - template: 'Jobs/SAST.gitlab-ci.yml'
+  - template: 'Jobs/Secret-Detection.gitlab-ci.yml'
+#  - template: 'Security/DAST.gitlab-ci.yml'
+#  - template: 'Jobs/Container-Scanning.gitlab-ci.yml'
+#  - template: 'Security/Dependency-Scanning.gitlab-ci.yml'
 stages:
   - build
   - test
@@ -23,11 +27,38 @@ variables:
   PORT: 8080
   DOCKER_DRIVER: overlay2
 
-docker_build:
-  stage: build
+# Anchor for Docker configuration
+.docker-setup: &docker-setup
   image: docker:24.0.5
   tags:
     - docker
+  services:
+    - docker:24.0.5-dind
+  variables:
+    DOCKER_DRIVER: overlay2
+
+# Base job for Docker build and push tasks
+.docker-job: &docker-job
+  <<: *docker-setup
+  script:
+    - echo "Starting Docker operations..."
+
+.build:
+  stage: build
+  tags:
+    - docker
+  variables:  
+    IMAGE_TAG: $DOCKER_REGISTRY_URL/netflix-app/$DOCKER_IMAGE_PREFIX-tst:$CI_COMMIT_SHA
+  before_script:
+    - docker login -u $REGISTRY_USER -p $REGISTRY_PASSWORD $DOCKER_REGISTRY_URL
+  script: 
+    - docker build -t $IMAGE_TAG . 
+    - docker push $IMAGE_TAG
+
+# Docker build job
+docker_build:
+  <<: *docker-job
+  stage: build
   script:
     - echo "Building Docker image..."
     - docker build --build-arg TMDB_V3_API_KEY=$TMDB_V3_API_KEY -t $DOCKER_IMAGE_PREFIX-tst .
@@ -40,39 +71,32 @@ docker_build:
       - image
     expire_in: 1 day
 
+# Docker test job
 docker_test:
+  <<: *docker-job
   stage: build
-  image: docker:24.0.5
   needs:
     - docker_build
-  tags:
-    - docker
   dependencies:
     - docker_build
   script: |
-    echo "Loading Docker image..."
     docker load -i image/$DOCKER_IMAGE_PREFIX-tst-$CI_PIPELINE_ID.tar
-    echo "Running Docker container..."
     docker run --rm -d --name $DOCKER_IMAGE_PREFIX-tst -p $PORT:80 --network minikube $DOCKER_IMAGE_PREFIX-tst
     export containerIP=$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' $DOCKER_IMAGE_PREFIX-tst)
-    echo "Container IP: $IP"
+    echo "Container IP: $containerIP"
     sleep 10
     echo "Checking container status..."
     docker run --rm --network minikube alpine/curl curl --fail http://${containerIP}:80 || { echo "Error: Failed to connect to ${containerIP}:80"; exit 1; }
     echo "Stopping Docker container..."
     docker stop $DOCKER_IMAGE_PREFIX-tst
 
-
+# Docker push job
 docker_push:
+  <<: *docker-job
   stage: build
   needs:
     - docker_build
-  image: docker:24.0.5
-  tags:
-    - docker
-  services:
-    - docker:24.0.5-dind
-  script:
+  script: 
     - HOST="registry.local"
     - PORT=8443
     - echo "Testing connection to $HOST:$PORT"
@@ -84,114 +108,266 @@ docker_push:
     - docker tag $DOCKER_IMAGE_PREFIX-tst $DOCKER_REGISTRY_URL/netflix-app/$DOCKER_IMAGE_PREFIX-tst
     - docker push $DOCKER_REGISTRY_URL/netflix-app/$DOCKER_IMAGE_PREFIX-tst
 
-
 code_quality:
-  stage: ".pre"
-  image: docker:latest
-  tags:
-  - docker
+  stage: .pre
+  <<: *docker-setup
   variables:
     REPORT_FORMAT: html
-  after_script: 
-    - ls -l 
   artifacts:
     paths: [gl-code-quality-report.html]
     reports:
       codequality: []
 
-
-sonarqube_scan:
-  image: sonarsource/sonar-scanner-cli:latest
-  stage: test
-  tags:
-  - docker
-  script:
-    - sonar-scanner -Dsonar.projectKey=netflix-app -Dsonar.host.url=http://sonarqube.local:9000 -Dsonar.login=$SONARQUBE_TOKEN
-  artifacts:
-    paths:
-      - sonar-report.json
-
-dependency_check:
-  image: owasp/dependency-check:latest
-  stage: test
-  tags:
-  - docker
-  script:
-    - dependency-check.sh --project netflix-app --scan . --format XML --out .
-  artifacts:
-    paths:
-      - dependency-check-report.xml
-
-trivy_scan:
-  image: aquasec/trivy:latest
+secret_detection:
   stage: .pre
   tags:
     - docker
+  variables:
+    SECRET_DETECTION_HISTORIC_SCAN: 'true'
+
+.kubesec:
+  image:
+    name: docker:latest
+  stage: test
+  tags:
+    - docker
+  before_script:
+    - docker pull registry.gitlab.com/security-products/kubesec:5 
+    - apk add --no-cache jq
+    - touch kubesec-report.json
+    - chmod 777 kubesec-report.json
   script:
-    # Run the Trivy filesystem scan on the current directory
-    - fs --exit-code 0 --format json --output trivy-report.json .
+    - |
+      docker run --rm -v $(pwd):/workspace registry.gitlab.com/security-products/kubesec:5 sh -c '
+      for file in /workspace/Kubernetes/*.yml; do
+      echo "Scanning $file"
+      kubesec scan "$file" >> /workspace/kubesec-report.json
+      done'
+  after_script:
+    # Convert JSON to HTML using jq
+    - |
+      if [ -f "kubesec-report.json" ]; then
+        jq -r '.vulnerabilities[] | "<tr><td>" + .name + "</td><td>" + .description + "</td><td>" + .severity + "</td><td>" + .location.file + "</td><td>" + (.location.start_line | tostring) + "</td></tr>"' kubesec-report.json > report_body.html
+        echo "<html><head><title>SAST KUBESEC Report - ${CI_JOB_NAME}</title></head><body><h1>SAST Report - ${CI_JOB_NAME}</h1><table border='1'><tr><th>Name</th><th>Description</th><th>Severity</th><th>File</th><th>Start Line</th></tr>" > ${CI_JOB_NAME}-report.html
+        cat report_body.html >> ${CI_JOB_NAME}-report.html
+        echo "</table></body></html>" >> ${CI_JOB_NAME}-report.html
+        rm report_body.html
+      else
+        echo "kubesec-report.json not found, skipping HTML generation."
+      fi
   artifacts:
     paths:
-      - trivy-report.json
+      - kubesec-report.json  # Store the kubesec report as an artifact
+      - ${CI_JOB_NAME}-report.html
+    expire_in: 1 week  # Set how long to keep the report
 
+sast:
+  stage: test
+  variables:
+    CI_DEBUG_TRACE: "true"
+    SAST_OUTPUT_FORMAT: "HTML"
+  tags:
+    - docker 
+  before_script:
+    - apk add --no-cache jq
+  script:
+    - echo "Running SAST scan..."  # Replace with your actual SAST scan command
+  after_script:
+    # Convert JSON to HTML using jq
+    - |
+      if [ -f "gl-sast-report.json" ]; then
+        # Extract vulnerabilities from JSON and create the HTML table rows
+        jq -r '.vulnerabilities[] | "<tr><td>" + .name + "</td><td>" + .description + "</td><td>" + .severity + "</td><td>" + .location.file + "</td><td>" + (.location.start_line | tostring) + "</td></tr>"' gl-sast-report.json > report_body.html
+        # Create the full HTML report file
+        echo "<html><head><title>SAST Report - ${CI_JOB_NAME}</title></head><body><h1>SAST Report - ${CI_JOB_NAME}</h1><table border='1'><tr><th>Name</th><th>Description</th><th>Severity</th><th>File</th><th>Start Line</th></tr>" > gl-sast-report-${CI_JOB_NAME}.html
+        cat report_body.html >> gl-sast-report-${CI_JOB_NAME}.html
+        echo "</table></body></html>" >> gl-sast-report-${CI_JOB_NAME}.html
+        # Cleanup temporary files
+        rm report_body.html
+      else
+        echo "gl-sast-report.json not found, skipping HTML generation."
+      fi
+  artifacts:
+    reports:
+      sast: []
+    paths:
+      - gl-sast-report.json
+      - gl-sast-report-*.html  # Use wildcard to include all HTML reports
+    expire_in: 1 week
 
-trivy_fs_scan:
-  stage: .pre
+.container_scanning:
+  stage: test
+  tags:
+    - docker
+  variables:
+    CS_IMAGE: $DOCKER_REGISTRY_URL/netflix-app/$DOCKER_IMAGE_PREFIX-tst
+    SECURE_LOG_LEVEL: debug
+    CS_REGISTRY_USER: $REGISTRY_USER
+    CS_REGISTRY_PASSWORD: $REGISTRY_PASSWORD
+  needs:
+    - docker_push
+
+.dependency_scanning:
+  stage: test
+  tags:
+    - docker 
+  variables:
+    CI_DEBUG_TRACE: "true"
+
+##################################################################################
+.sonarqube_scan:
+  image: wilsongmn/sonarqube:latest
+  stage: test
+  services:
+    - docker:dind
   tags:
   - docker
-  image: aquasec/trivy:latest
   script:
-    - export TRIVY_CACHE_DIR=$(pwd)/.trivy-cache
+    - sonar-scanner -Dsonar.projectKey=netflix-app -Dsonar.host.url=http://sonarqube:9000 -Dsonar.login=$SONARQUBE_TOKEN
+    - |
+      uname -a
+      sleep 10
+      curl -u $SONARQUBE_TOKEN: http://sonarqube:9000/api/issues/search?componentKeys=netflix-app -o sonar-report.json
+  artifacts:
+    paths:
+      - sonar-report.json
+    when: always
+  after_script:
+    - echo "SonarQube scan completed."
+    - ls -l
+
+.dependency_check:
+  stage: test
+  tags:
+    - docker
+  image:
+    name: docker:latest
+  services:
+    - docker:dind
+  variables:
+    DOCKER_DRIVER: overlay2
+  before_script:
+    - docker pull owasp/dependency-check:latest
+  script:
+    - docker run --rm -v .:/project owasp/dependency-check:latest dependency-check.sh --project netflix-app --scan /project --format HTML --out /project
+    - ls -l
+  artifacts:
+    paths:
+      - dependency-check-report.html
+
+trivy_fs_scan:
+  image:
+    name: docker:latest
+  stage: .pre
+  services:
+    - docker:dind
+  tags:
+    - docker
+  variables:
+    DOCKER_DRIVER: overlay2
+    TRIVY_CACHE_DIR: $CI_PROJECT_DIR/.trivy-cache
+    TRIVY_IMAGE: aquasec/trivy:latest
+  before_script:
+    - apk add --no-cache curl jq # Install curl and jq
+    - docker pull $TRIVY_IMAGE
+  script:
+    - echo "Running Trivy FS scan..."
     - mkdir -p $TRIVY_CACHE_DIR
-    - fs --cache-dir $TRIVY_CACHE_DIR . > trivyfs.txt
+    - docker run --rm -v $CI_PROJECT_DIR:/project -v $TRIVY_CACHE_DIR:/root/.cache/ $TRIVY_IMAGE fs --exit-code 0 --format table /project > trivyfs.txt
     - cat trivyfs.txt
   artifacts:
     paths:
       - trivyfs.txt
 
+
 trivy_image_scan:
   stage: test
   tags:
-  - docker
-  image: aquasec/trivy:latest
+    - docker
+  image:
+    name: docker:latest
+  services:
+    - docker:dind
+  variables:
+    DOCKER_DRIVER: overlay2
+    TRIVY_IMAGE: aquasec/trivy:latest
+    DOCKER_IMAGE: $DOCKER_IMAGE_PREFIX-tst  # Ensure this is properly defined
+    TRIVY_CACHE_DIR: $CI_PROJECT_DIR/.trivy-cache
+  before_script:
+    - apk add --no-cache curl jq # Install necessary tools
+    - docker pull $TRIVY_IMAGE  # Pull the specific Trivy version
   script:
-    - export TRIVY_CACHE_DIR=$(pwd)/.trivy-cache
+    - echo "Running Trivy Image scan..."
     - mkdir -p $TRIVY_CACHE_DIR
-    - image --cache-dir $TRIVY_CACHE_DIR $DOCKER_IMAGE > trivyimage.txt
-    - cat trivyimage.txt
+    - docker run --rm -v $TRIVY_CACHE_DIR:/root/.cache/ -v /var/run/docker.sock:/var/run/docker.sock $TRIVY_IMAGE image --format table --cache-dir /root/.cache/ $DOCKER_IMAGE > trivyimage.txt
   artifacts:
     paths:
       - trivyimage.txt
 
 
+########################################################################
+
 k8s_dev_deploy:
   stage: dev-deploy
-  image: 
+  image:
     name: wilsongmn/kubectl:alpine3.7
+  services:
+    - docker:dind
   dependencies:
     - docker_push
   script:
     - HOST="cluster.local"
     - PORT=8443
     - echo "Testing connection to $HOST:$PORT"
-    - nc -h
     - nc -z -w 5 $HOST $PORT
     - if [ $? -ne 0 ]; then echo "Host $HOST:$PORT is not reachable."; exit 1; else echo "Host $HOST:$PORT is reachable."; fi
     - export KUBECONFIG=$DEV_KUBE_CONFIG
     - kubectl version -o yaml
     - kubectl config get-contexts
     - kubectl get nodes
-    - kubectl apply -f /Kubernetes/deployment.yml
-    - kubectl apply -f /Kubernetes/service.yml
+    - kubectl apply -f ./Kubernetes/deployment.yml
+    - kubectl apply -f ./Kubernetes/service.yml
+    - kubectl apply -f ./Kubernetes/ingress.yml
 
+##############################################################
+
+ 
 dast:
   stage: secure
   tags:
-  - docker
-  image: docker:latest
-  dependencies:
-    - k8s_dev_deploy
+    - docker
+  image:
+    name: docker:latest
+  services:
+    - docker:dind
   variables:
-    DNS_HOSTNAME: "cluster.local"
+    DOCKER_DRIVER: overlay2
+  before_script:
+    - docker pull registry.gitlab.com/security-products/dast:latest
+    - apk add --no-cache jq
   script:
-    - echo "Dinamic application segurity testing"
+    - mkdir ./dast-reports/
+    - chmod 777 ./dast-reports/
+    - docker run --rm -t --network=minikube --add-host=netflix.local:192.168.49.2 -e DAST_WEBSITE="http://netflix.local" -e DAST_FULL_SCAN_ENABLED="true" -e DAST_USE_AJAX_SPIDER="true" -e DAST_DEBUG="true" -e DAST_HTML_REPORT="true" -v ./dast-reports:/zap/wrk registry.gitlab.com/security-products/dast:latest
+    - ls -l ./dast-reports/
+  after_script:
+    # Convert JSON to HTML using a tool like jq and a custom HTML script
+    - |
+      # Read the JSON file and extract vulnerabilities
+      jq -r '.vulnerabilities[] | "<tr><td>" + .name + "</td><td>" + .description + "</td><td>" + .severity + "</td><td>" + .location.file + "</td><td>" + (.location.start_line | tostring) + "</td></tr>"' ./dast-reports/gl-dast-report.json > report_body.html
+
+      # Create HTML file with table structure
+      echo "<html><head><title>DAST Report - ${CI_JOB_NAME}</title></head><body><table border='1'><tr><th>Name</th><th>Description</th><th>Severity</th><th>File</th><th>Start Line</th></tr>" > ./dast-reports/gl-dast-report.html
+      cat report_body.html >> ./dast-reports/gl-dast-report.html
+      echo "</table></body></html>" >> ./dast-reports/gl-dast-report.html
+
+      # Cleanup
+      rm report_body.html
+
+  artifacts:
+    reports:
+      dast: []  # Default output location for DAST report
+    paths:
+      - ./dast-reports/gl-dast-report.json
+      - ./dast-reports/gl-dast-report.html
+    expire_in: 1 week
