@@ -1,19 +1,20 @@
 # .gitlab
 
-workflow:
-  name: Build & Deploy
-  rules:
-    - if: '$CI_COMMIT_BRANCH == "main" || $CI_COMMIT_BRANCH =~ /^feature/'
-      when: always
-    - if: '$CI_MERGE_REQUEST_SOURCE_BRANCH_NAME =~ /^feature/ && $CI_PIPELINE_SOURCE == "merge_request_event"'
-      when: always
+#workflow:
+#  name: Build & Deploy
+#  rules:
+#    - if: '$CI_COMMIT_BRANCH == "main" || $CI_COMMIT_BRANCH =~ /^feature/'
+#      when: always
+#    - if: '$CI_MERGE_REQUEST_SOURCE_BRANCH_NAME =~ /^feature/ && $CI_PIPELINE_SOURCE == "merge_request_event"'
+#      when: always
 
 include:
   - template: 'Jobs/Code-Quality.gitlab-ci.yml'
   - template: 'Jobs/SAST.gitlab-ci.yml'
   - template: 'Jobs/Secret-Detection.gitlab-ci.yml'
-  - template: 'Jobs/Container-Scanning.gitlab-ci.yml'
-#  - template: 'Jobs/Dependency-Scanning.gitlab-ci.yml'
+#  - template: 'Security/DAST.gitlab-ci.yml'
+#  - template: 'Jobs/Container-Scanning.gitlab-ci.yml'
+#  - template: 'Security/Dependency-Scanning.gitlab-ci.yml'
 stages:
   - build
   - test
@@ -71,7 +72,7 @@ docker_build:
     expire_in: 1 day
 
 # Docker test job
-.docker_test:
+docker_test:
   <<: *docker-job
   stage: build
   needs:
@@ -107,7 +108,7 @@ docker_push:
     - docker tag $DOCKER_IMAGE_PREFIX-tst $DOCKER_REGISTRY_URL/netflix-app/$DOCKER_IMAGE_PREFIX-tst
     - docker push $DOCKER_REGISTRY_URL/netflix-app/$DOCKER_IMAGE_PREFIX-tst
 
-.code_quality:
+code_quality:
   stage: .pre
   <<: *docker-setup
   variables:
@@ -117,32 +118,95 @@ docker_push:
     reports:
       codequality: []
 
-.secret_detection:
+secret_detection:
   stage: .pre
   tags:
     - docker
   variables:
     SECRET_DETECTION_HISTORIC_SCAN: 'true'
 
-.sast:
+.kubesec:
+  image:
+    name: docker:latest
+  stage: test
+  tags:
+    - docker
+  before_script:
+    - docker pull registry.gitlab.com/security-products/kubesec:5 
+    - apk add --no-cache jq
+    - touch kubesec-report.json
+    - chmod 777 kubesec-report.json
+  script:
+    - |
+      docker run --rm -v $(pwd):/workspace registry.gitlab.com/security-products/kubesec:5 sh -c '
+      for file in /workspace/Kubernetes/*.yml; do
+      echo "Scanning $file"
+      kubesec scan "$file" >> /workspace/kubesec-report.json
+      done'
+  after_script:
+    # Convert JSON to HTML using jq
+    - |
+      if [ -f "kubesec-report.json" ]; then
+        jq -r '.vulnerabilities[] | "<tr><td>" + .name + "</td><td>" + .description + "</td><td>" + .severity + "</td><td>" + .location.file + "</td><td>" + (.location.start_line | tostring) + "</td></tr>"' kubesec-report.json > report_body.html
+        echo "<html><head><title>SAST KUBESEC Report - ${CI_JOB_NAME}</title></head><body><h1>SAST Report - ${CI_JOB_NAME}</h1><table border='1'><tr><th>Name</th><th>Description</th><th>Severity</th><th>File</th><th>Start Line</th></tr>" > ${CI_JOB_NAME}-report.html
+        cat report_body.html >> ${CI_JOB_NAME}-report.html
+        echo "</table></body></html>" >> ${CI_JOB_NAME}-report.html
+        rm report_body.html
+      else
+        echo "kubesec-report.json not found, skipping HTML generation."
+      fi
+  artifacts:
+    paths:
+      - kubesec-report.json  # Store the kubesec report as an artifact
+      - ${CI_JOB_NAME}-report.html
+    expire_in: 1 week  # Set how long to keep the report
+
+sast:
   stage: test
   variables:
     CI_DEBUG_TRACE: "true"
-    SCAN_KUBERNETES_MANIFESTS: "true"
+    SAST_OUTPUT_FORMAT: "HTML"
   tags:
     - docker 
+  before_script:
+    - apk add --no-cache jq
+  script:
+    - echo "Running SAST scan..."  # Replace with your actual SAST scan command
+  after_script:
+    # Convert JSON to HTML using jq
+    - |
+      if [ -f "gl-sast-report.json" ]; then
+        # Extract vulnerabilities from JSON and create the HTML table rows
+        jq -r '.vulnerabilities[] | "<tr><td>" + .name + "</td><td>" + .description + "</td><td>" + .severity + "</td><td>" + .location.file + "</td><td>" + (.location.start_line | tostring) + "</td></tr>"' gl-sast-report.json > report_body.html
+        # Create the full HTML report file
+        echo "<html><head><title>SAST Report - ${CI_JOB_NAME}</title></head><body><h1>SAST Report - ${CI_JOB_NAME}</h1><table border='1'><tr><th>Name</th><th>Description</th><th>Severity</th><th>File</th><th>Start Line</th></tr>" > gl-sast-report-${CI_JOB_NAME}.html
+        cat report_body.html >> gl-sast-report-${CI_JOB_NAME}.html
+        echo "</table></body></html>" >> gl-sast-report-${CI_JOB_NAME}.html
+        # Cleanup temporary files
+        rm report_body.html
+      else
+        echo "gl-sast-report.json not found, skipping HTML generation."
+      fi
   artifacts:
     reports:
-      sast: gl-sast-report.json
+      sast: []
+    paths:
+      - gl-sast-report.json
+      - gl-sast-report-*.html  # Use wildcard to include all HTML reports
+    expire_in: 1 week
 
 .container_scanning:
   stage: test
   tags:
     - docker
-  needs:
-    - docker_push
   variables:
     CS_IMAGE: $DOCKER_REGISTRY_URL/netflix-app/$DOCKER_IMAGE_PREFIX-tst
+    SECURE_LOG_LEVEL: debug
+    CS_REGISTRY_USER: $REGISTRY_USER
+    CS_REGISTRY_PASSWORD: $REGISTRY_PASSWORD
+  needs:
+    - docker_push
+
 .dependency_scanning:
   stage: test
   tags:
@@ -185,13 +249,13 @@ docker_push:
   before_script:
     - docker pull owasp/dependency-check:latest
   script:
-    - docker run --rm -v .:/project owasp/dependency-check:latest dependency-check.sh --project netflix-app --scan /project --format XML --out /project
+    - docker run --rm -v .:/project owasp/dependency-check:latest dependency-check.sh --project netflix-app --scan /project --format HTML --out /project
     - ls -l
   artifacts:
     paths:
-      - dependency-check-report.xml
+      - dependency-check-report.html
 
-.trivy_fs_scan:
+trivy_fs_scan:
   image:
     name: docker:latest
   stage: .pre
@@ -216,7 +280,7 @@ docker_push:
       - trivyfs.txt
 
 
-.trivy_image_scan:
+trivy_image_scan:
   stage: test
   tags:
     - docker
@@ -243,7 +307,7 @@ docker_push:
 
 ########################################################################
 
-.k8s_dev_deploy:
+k8s_dev_deploy:
   stage: dev-deploy
   image:
     name: wilsongmn/kubectl:alpine3.7
@@ -265,4 +329,45 @@ docker_push:
     - kubectl apply -f ./Kubernetes/service.yml
     - kubectl apply -f ./Kubernetes/ingress.yml
 
+##############################################################
 
+ 
+dast:
+  stage: secure
+  tags:
+    - docker
+  image:
+    name: docker:latest
+  services:
+    - docker:dind
+  variables:
+    DOCKER_DRIVER: overlay2
+  before_script:
+    - docker pull registry.gitlab.com/security-products/dast:latest
+    - apk add --no-cache jq
+  script:
+    - mkdir ./dast-reports/
+    - chmod 777 ./dast-reports/
+    - docker run --rm -t --network=minikube --add-host=netflix.local:192.168.49.2 -e DAST_WEBSITE="http://netflix.local" -e DAST_FULL_SCAN_ENABLED="true" -e DAST_USE_AJAX_SPIDER="true" -e DAST_DEBUG="true" -e DAST_HTML_REPORT="true" -v ./dast-reports:/zap/wrk registry.gitlab.com/security-products/dast:latest
+    - ls -l ./dast-reports/
+  after_script:
+    # Convert JSON to HTML using a tool like jq and a custom HTML script
+    - |
+      # Read the JSON file and extract vulnerabilities
+      jq -r '.vulnerabilities[] | "<tr><td>" + .name + "</td><td>" + .description + "</td><td>" + .severity + "</td><td>" + .location.file + "</td><td>" + (.location.start_line | tostring) + "</td></tr>"' ./dast-reports/gl-dast-report.json > report_body.html
+
+      # Create HTML file with table structure
+      echo "<html><head><title>DAST Report - ${CI_JOB_NAME}</title></head><body><table border='1'><tr><th>Name</th><th>Description</th><th>Severity</th><th>File</th><th>Start Line</th></tr>" > ./dast-reports/gl-dast-report.html
+      cat report_body.html >> ./dast-reports/gl-dast-report.html
+      echo "</table></body></html>" >> ./dast-reports/gl-dast-report.html
+
+      # Cleanup
+      rm report_body.html
+
+  artifacts:
+    reports:
+      dast: []  # Default output location for DAST report
+    paths:
+      - ./dast-reports/gl-dast-report.json
+      - ./dast-reports/gl-dast-report.html
+    expire_in: 1 week
